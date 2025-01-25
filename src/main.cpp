@@ -9,6 +9,7 @@
 #include <stb/stb_image.h>
 
 #include "shader.hpp"
+#include "mesh.hpp"
 
 #include <iostream>
 
@@ -18,19 +19,37 @@ float r = (float)WINDOW_WIDTH / WINDOW_HEIGHT;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void process_input(GLFWwindow* window);
+void cursor_pos_callback(GLFWwindow*, double x_pos, double y_pos);
+
+glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 camera_position = glm::vec3(2.0f, 0.0f, 4.5f);
+float pitch = 0.0f;
+float yaw = 90.0f;
+float radius = 2.0f;
 
 int main() {
 	float vertices[] = {
-		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f,   // top right
-		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // bottom right
-		-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,   // bottom left
-		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f    // top left 
+		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,   // top right
+		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom right
+		-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom left
+		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,    // top left 
 	};
 
 	unsigned int indices[] = {
 		0, 1, 2,
 		2, 3, 0
 	};
+
+	std::vector<Vertex> mesh_data;
+	for (int j = 0; j < 6; j++) {
+		int i = indices[j];
+		Vertex vertex = {
+			glm::vec3(vertices[i*8], vertices[i*8+1], vertices[i*8+2]),
+			glm::vec2(vertices[i*8+3], vertices[i*8+4]),
+			glm::vec3(vertices[i*8+5], vertices[i*8+6], vertices[i*8+7])
+		};
+		mesh_data.push_back(vertex);
+	}
 
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -42,6 +61,9 @@ int main() {
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	std::cout << "Current Version: " << glGetString(GL_VERSION) << std::endl;
+	glfwSetCursorPosCallback(window, cursor_pos_callback);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glEnable(GL_DEPTH_TEST);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -51,42 +73,9 @@ int main() {
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 460");
 
-	unsigned int VAO, VBO, EBO;
-	glGenVertexArrays(1, &VAO);
-	glBindVertexArray(VAO);
-
-	glGenBuffers(1, &VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glGenBuffers(1, &EBO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-	glBindVertexArray(0);
-
-	unsigned int texture;
-	int width, height, channels;
-	stbi_set_flip_vertically_on_load(true);
-	unsigned char* data = stbi_load("assets/aurora.png", &width, &height, &channels, 0);
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-	glGenerateMipmap(GL_TEXTURE_2D);
-	stbi_image_free(data);
-	float brightness = 1.0f;
-
 	Shader shader("shaders/default.vert", "shaders/default.frag");
     shader.bind();
-	shader.set_int("tex", 0);
+	Mesh mesh("assets/monkey.obj");
 
 	while (!glfwWindowShouldClose(window)) {
 		process_input(window);
@@ -98,18 +87,25 @@ int main() {
 		ImGui::NewFrame();
 
 		// ImGui Stuff Goes Here
-		ImGui::ShowDemoWindow();
 		ImGui::Begin("Menu");
-		ImGui::SliderFloat("Brightness", &brightness, 0.0f, 1.0f);
 		ImGui::End();
 
-		shader.bind();
-		shader.set_float("brightness", brightness);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, texture);
+		camera_position = glm::vec3(
+			position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
+			position.y + radius * glm::sin(glm::radians(pitch)),
+			position.z + radius * glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch))
+		);
 
-		glBindVertexArray(VAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 proj = glm::perspective(90.0f, (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
+		shader.set_mat4x4("model", model);
+		shader.set_mat4x4("view", view);
+		shader.set_mat4x4("proj", proj);
+		shader.set_vec3("cam_pos", camera_position);
+
+		mesh.draw(shader, GL_TRIANGLES);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -134,4 +130,26 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 	glViewport(0, 0, width, height);
 	WINDOW_WIDTH = width;
 	WINDOW_HEIGHT = height;
+}
+
+void cursor_pos_callback(GLFWwindow*, double x_pos, double y_pos) {
+	static float last_x = (float)WINDOW_WIDTH / 2.0;
+	static float last_y = (float)WINDOW_HEIGHT / 2.0;
+	static bool first_mouse = true;
+
+	if (first_mouse) {
+		last_x = x_pos;
+		last_y = y_pos;	
+		first_mouse = false;
+	}
+
+	float x_offset = (float)x_pos - last_x;
+	float y_offset = last_y - (float)y_pos;
+	last_x = (float)x_pos;
+	last_y = (float)y_pos;
+
+	yaw += x_offset;	
+	if (pitch + y_offset < 89.0f && pitch + y_offset > -89.0f) {
+		pitch += y_offset;
+	} 
 }

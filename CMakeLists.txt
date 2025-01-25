@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-project(template)
+project(reaction_diffusion_3d)
 
 add_subdirectory("lib/glfw")
 find_package(OpenGL REQUIRED)
@@ -15,6 +15,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/lib/glfw/include
 	${CMAKE_CURRENT_SOURCE_DIR}/lib/glm
 	${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui
+	${CMAKE_CURRENT_SOURCE_DIR}/lib/tinyobjloader
 )
 
 file(GLOB_RECURSE SRC_FILES src/*.cpp)
@@ -33,6 +34,9 @@ add_executable(${CMAKE_PROJECT_NAME}
 	lib/imgui/imgui_widgets.cpp
 	lib/imgui/backends/imgui_impl_glfw.cpp
 	lib/imgui/backends/imgui_impl_opengl3.cpp
+
+	# tinyobjloader
+	lib/tinyobjloader/tiny_obj_loader.cc
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC ${OPENGL_LIBRARIES} glfw)
