@@ -81,25 +81,37 @@ int main() {
 
 	unsigned int texture;
 	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_3D, texture);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexStorage3D(GL_TEXTURE_3D, 1, GL_RGBA8, width, height, depth);
 
-	std::vector<unsigned char> initial_conditions(width * height * depth * 4, 0);
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, width, height, depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, initial_conditions.data());
-	glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8);
+	// std::vector<std::vector<std::vector<std::vector<float>>>> v(width, std::vector<std::vector<std::vector<float>>>(height, std::vector<std::vector<float>>(depth, std::vector<float>(4, 0))));
+	std::vector<float> initial_conditions;
+
+	for (int i = 0; i < width; i++) {
+		for (int j = 0; j < height; j++) {
+			for (int k = 0; k < depth; k++) {
+				initial_conditions.push_back(i / (float)width);
+				initial_conditions.push_back(1.0f);
+				initial_conditions.push_back(1.0f);
+				initial_conditions.push_back(1.0f);
+			}
+		}
+	}
+
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
+	glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16);
 
 	// Reaction Diffusion Mesh
-
 	std::vector<Vertex> rd_mesh_vertices;
 	for (int i = 0; i < width; i++) {
 		for (int j = 0; j < height; j++) {
 			for (int k = 0; k < depth; k++) {
 				Vertex vertex = {
-					glm::vec3(i / (float)width - 0.5, j / (float)height - 0.5, k / (float)depth - 0.5),
+					glm::vec3(i / (float)width, j / (float)height, k / (float)depth),
 					glm::vec2(0.0, 0.0),
 					glm::vec3(0.0, 0.0, 0.0)
 				};
@@ -119,6 +131,7 @@ int main() {
 	ImGui_ImplOpenGL3_Init("#version 460");
 
 	Shader shader("shaders/default.vert", "shaders/default.frag", "shaders/default.geom");
+	shader.set_int("grid_tex", 0);
     shader.bind();
 	Mesh mesh("assets/icosphere_3.obj");
 
@@ -132,8 +145,8 @@ int main() {
 		ImGui::NewFrame();
 
 		// ImGui Stuff Goes Here
-		ImGui::Begin("Menu");
-		ImGui::End();
+		// ImGui::Begin("Menu");
+		// ImGui::End();
 
 		camera_position = glm::vec3(
 			position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
@@ -149,8 +162,13 @@ int main() {
 		shader.set_mat4x4("view", view);
 		shader.set_mat4x4("proj", proj);
 		shader.set_vec3("cam_pos", camera_position);
+		shader.set_float("width", (float)width);
+		shader.set_float("height", (float)height);
+		shader.set_float("depth", (float)depth);
 
 		// mesh.draw(shader, GL_TRIANGLES);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_3D, texture);
 		rd.draw(shader, GL_POINTS);
 
 		ImGui::Render();

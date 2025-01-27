@@ -1,9 +1,15 @@
 #version 460 core
+layout (rgba16, binding = 0) uniform image3D grid;
+
 out vec4 FragColor;
 
 in vec2 TexCoord;
 in vec3 Normal;
 in vec3 FragPos;
+
+flat in ivec3 grid_pos;
+
+uniform sampler3D grid_tex;
 
 uniform vec3 cam_pos;
 
@@ -18,7 +24,10 @@ void main() {
     // vec3 diffuse = max(dot(normalize(Normal), normalize(lightPos - FragPos)), 0.0) * lightColor;
     // vec3 specular = 0.5 * pow(max(dot(normalize(cam_pos - FragPos), reflect(-normalize(lightPos - FragPos), normalize(Normal))), 0.0), 32) * lightColor;
 
+    // float brightness = float(imageLoad(grid, grid_pos).r);
+    vec3 brightness = texture(grid_tex, vec3(float(grid_pos.x) / 20.0, float(grid_pos.y) / 20.0, float(grid_pos.z) / 20.0)).rgb;
+
     // FragColor = vec4((ambient + diffuse + specular) * objectColor, 0.4);
-    FragColor = vec4((ambient) * objectColor, 0.4);
+    FragColor = vec4(brightness.r * objectColor, 1.0);
     // FragColor = vec4((cam_lighting) * objectColor, 0.4);
 }
