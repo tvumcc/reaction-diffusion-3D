@@ -118,7 +118,7 @@ int main() {
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 460");
 
-	Shader shader("shaders/default.vert", "shaders/default.frag");
+	Shader shader("shaders/default.vert", "shaders/default.frag", "shaders/default.geom");
     shader.bind();
 	Mesh mesh("assets/icosphere_3.obj");
 

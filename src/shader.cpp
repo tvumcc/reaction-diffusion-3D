@@ -20,7 +20,7 @@ void checkErrors(unsigned int ID, ShaderType type, const std::string& filename) 
             std::cout << "Problem linking " << filename << ":\n" << error_log << std::endl;
         }
     } else {
-        std::string type_strs[3] = {"VERTEX", "FRAGMENT", "COMPUTE"};
+        std::string type_strs[4] = {"VERTEX", "FRAGMENT", "GEOMETRY", "COMPUTE"};
         std::string type_str = type_strs[(int)type];
 
         glGetShaderiv(ID, GL_COMPILE_STATUS, &success);
@@ -32,7 +32,7 @@ void checkErrors(unsigned int ID, ShaderType type, const std::string& filename) 
 }
 
 // Create a shader given a file path to a vertex and fragment shader
-Shader::Shader(const std::string& vertex_source_path, const std::string& fragment_source_path) {
+Shader::Shader(const std::string& vertex_source_path, const std::string& fragment_source_path, const std::string& geometry_source_path) {
     std::string line, v_text, f_text;
     std::ifstream v_file(vertex_source_path), f_file(fragment_source_path);
 
@@ -63,6 +63,7 @@ Shader::Shader(const std::string& vertex_source_path, const std::string& fragmen
     // Link vertex and fragment shaders
     this->ID = glCreateProgram();
     glAttachShader(ID, VS);
+    if (geometry_source_path != "NONE") glAttachShader(ID, compile_geometry_shader(geometry_source_path));
     glAttachShader(ID, FS);
     glLinkProgram(ID);
     checkErrors(ID, ShaderType::Program, vertex_source_path + " and " + fragment_source_path);
@@ -70,6 +71,26 @@ Shader::Shader(const std::string& vertex_source_path, const std::string& fragmen
     // Delete vertex and fragment shaders as they are already linked to the main shader
     glDeleteShader(VS);
     glDeleteShader(FS);
+}
+
+// Compile a geometry shader source file and return its ID
+unsigned int Shader::compile_geometry_shader(const std::string& geometry_source_path) {
+    std::string line, g_text;
+    std::ifstream g_file(geometry_source_path);
+
+    // Read vertex shader from file
+    while (std::getline(g_file, line))
+        g_text += line + "\n";
+    g_file.close();
+    const char* g_source = g_text.c_str();
+
+    // Compile vertex shader and check for errors
+    unsigned int GS = glCreateShader(GL_GEOMETRY_SHADER);
+    glShaderSource(GS, 1, &g_source, NULL);
+    glCompileShader(GS);
+    checkErrors(GS, ShaderType::Geometry, geometry_source_path);
+
+    return GS;
 }
 
 // Create a compute shader given the path to a source file

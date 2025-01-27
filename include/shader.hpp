@@ -6,6 +6,7 @@
 enum class ShaderType {
     Vertex = 0,
     Fragment,
+    Geometry,
     Compute,
     Program
 };
@@ -30,7 +31,9 @@ public:
 
 class Shader : public AbstractShader {
 public:
-    Shader(const std::string& vertex_source_path, const std::string& fragment_source_path);
+    Shader(const std::string& vertex_source_path, const std::string& fragment_source_path, const std::string& geometry_source_path = "NONE");
+private:
+    unsigned int compile_geometry_shader(const std::string& geometry_source_path);
 };
 
 class ComputeShader : public AbstractShader {
