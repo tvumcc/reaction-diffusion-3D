@@ -37,6 +37,8 @@ unsigned int MAX_WIDTH = 300;
 unsigned int MAX_HEIGHT = 300;
 unsigned int MAX_DEPTH = 300; 
 
+int alternate = 0;
+
 int main() {
 	float vertices[] = {
 		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,   // top right
@@ -102,8 +104,8 @@ int main() {
 		}
 	}
 
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
-	glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16);
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
+	glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA16F);
 
 	// Reaction Diffusion Mesh
 	std::vector<Vertex> rd_mesh_vertices;
@@ -131,9 +133,20 @@ int main() {
 	ImGui_ImplOpenGL3_Init("#version 460");
 
 	Shader shader("shaders/default.vert", "shaders/default.frag", "shaders/default.geom");
-	shader.set_int("grid_tex", 0);
     shader.bind();
+	shader.set_int("grid_tex", 0);
 	Mesh mesh("assets/icosphere_3.obj");
+
+	ComputeShader compute_shader("shaders/reaction_diffusion.glsl");
+	compute_shader.bind();
+	compute_shader.set_int("width", width);
+	compute_shader.set_int("height", height);
+	compute_shader.set_int("depth", depth);
+	compute_shader.set_float("a", 0.037f);
+	compute_shader.set_float("b", 0.06f);
+	compute_shader.set_float("D", 2.0f);
+	compute_shader.set_float("time_step", 0.5f);
+	compute_shader.set_float("space_step", 5.0f);
 
 	while (!glfwWindowShouldClose(window)) {
 		process_input(window);
@@ -148,6 +161,18 @@ int main() {
 		// ImGui::Begin("Menu");
 		// ImGui::End();
 
+		compute_shader.bind();
+		compute_shader.set_int("alternate", alternate);
+		// for (int i = 0; i < depth; i++) {
+		// 	compute_shader.set_int("depth_layer", i);
+		// 	glDispatchCompute(width, height, 1);
+		// glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		// }
+		glDispatchCompute(width, height, depth);
+		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		alternate = !alternate;
+
+
 		camera_position = glm::vec3(
 			position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
 			position.y + radius * glm::sin(glm::radians(pitch)),
@@ -155,6 +180,7 @@ int main() {
 		);
 
 
+		shader.bind();
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 proj = glm::perspective(90.0f, (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);

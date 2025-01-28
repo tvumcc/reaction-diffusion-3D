@@ -1,6 +1,4 @@
 #version 460 core
-layout (rgba16, binding = 0) uniform image3D grid;
-
 out vec4 FragColor;
 
 in vec2 TexCoord;
@@ -28,6 +26,6 @@ void main() {
     vec3 brightness = texture(grid_tex, vec3(float(grid_pos.x) / 20.0, float(grid_pos.y) / 20.0, float(grid_pos.z) / 20.0)).rgb;
 
     // FragColor = vec4((ambient + diffuse + specular) * objectColor, 0.4);
-    FragColor = vec4(brightness.r * objectColor, 1.0);
+    FragColor = vec4(brightness, 1.0);
     // FragColor = vec4((cam_lighting) * objectColor, 0.4);
 }
