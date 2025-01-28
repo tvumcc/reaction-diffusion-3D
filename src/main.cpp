@@ -29,9 +29,9 @@ float pitch = 0.0f;
 float yaw = 90.0f;
 float radius = 2.0f;
 
-unsigned int width = 20;
-unsigned int height = 20;
-unsigned int depth = 20;
+unsigned int width = 100;
+unsigned int height = 100;
+unsigned int depth = 100;
 
 unsigned int MAX_WIDTH = 300;
 unsigned int MAX_HEIGHT = 300;
@@ -96,16 +96,21 @@ int main() {
 	for (int i = 0; i < width; i++) {
 		for (int j = 0; j < height; j++) {
 			for (int k = 0; k < depth; k++) {
-				initial_conditions.push_back(i / (float)width);
-				initial_conditions.push_back(1.0f);
-				initial_conditions.push_back(1.0f);
-				initial_conditions.push_back(1.0f);
+				if (i*i*i + j*j*j + k*k*k <= 40*40*40) {
+					initial_conditions.push_back(1.0f);
+				} else {
+					initial_conditions.push_back(0.0f);
+				}
+
+				initial_conditions.push_back(0.0f);
+				initial_conditions.push_back(0.0f);
+				initial_conditions.push_back(0.0f);
 			}
 		}
 	}
 
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
-	glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA16F);
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
+	glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
 
 	// Reaction Diffusion Mesh
 	std::vector<Vertex> rd_mesh_vertices;
@@ -146,7 +151,10 @@ int main() {
 	compute_shader.set_float("b", 0.06f);
 	compute_shader.set_float("D", 2.0f);
 	compute_shader.set_float("time_step", 0.5f);
-	compute_shader.set_float("space_step", 5.0f);
+	compute_shader.set_float("space_step", 3.0f);
+
+	// glDispatchCompute(width, height, depth);
+	// glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 	while (!glfwWindowShouldClose(window)) {
 		process_input(window);
@@ -162,15 +170,15 @@ int main() {
 		// ImGui::End();
 
 		compute_shader.bind();
-		compute_shader.set_int("alternate", alternate);
+		// compute_shader.set_int("alternate", alternate);
 		// for (int i = 0; i < depth; i++) {
 		// 	compute_shader.set_int("depth_layer", i);
 		// 	glDispatchCompute(width, height, 1);
-		// glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		// 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		// }
 		glDispatchCompute(width, height, depth);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-		alternate = !alternate;
+		// alternate = !alternate;
 
 
 		camera_position = glm::vec3(

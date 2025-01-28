@@ -15,6 +15,6 @@ void main() {
 	TexCoord = aTexCoord;
     Normal = aNormal;
     FragPos = vec3(model * vec4(aPos, 1.0));
-    gl_PointSize = 25;
+    gl_PointSize = 4;
     gl_Position = vec4(aPos, 1.0);
 }
