@@ -12,9 +12,12 @@ uniform int alternate;
 uniform float space_step;
 uniform float time_step;
 
-uniform int a;
-uniform int b;
-uniform int D;
+uniform float F;
+uniform float k;
+uniform float Du;
+uniform float Dv;
+
+uniform bool paused;
 
 float U(int x, int y, int z) {
     if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth)
@@ -31,35 +34,17 @@ float V(int x, int y, int z) {
 }
 
 float dUdt(int x, int y, int z) {
-    float u = U(x, y, z);
-    float v = V(x, y, z);
+    float laplacian = U(x+1, y, z) + U(x-1, y, z) + U(x, y+1, z) + U(x, y-1, z) + U(x, y, z+1) + U(x, y, z-1) - 6.0 * U(x, y, z);
+    // float laplacian = U(x, y+1, z) + U(x, y-1, z) + U(x, y, z+1) + U(x, y, z-1) - 4.0 * U(x, y, z);
 
-    float d2Udx2 = (U(x+1, y, z) - 2 * u + U(x-1, y, z)) / pow(space_step, 2);
-    float d2Udy2 = (U(x, y+1, z) - 2 * u + U(x, y-1, z)) / pow(space_step, 2);
-    float d2Udz2 = (U(x, y, z+1) - 2 * u + U(x, y, z-1)) / pow(space_step, 2);
-
-    return (d2Udx2 + d2Udy2 + d2Udz2) + (pow(u, 2) * v) - ((a + b) * u);
+    return Du * laplacian - (U(x, y, z) * pow(V(x, y, z), 2.0)) + F * (1.0 - U(x, y, z));
 }
 
 float dVdt(int x, int y, int z) {
-    float u = U(x, y, z);
-    float v = V(x, y, z);
+    float laplacian = V(x+1, y, z) + V(x-1, y, z) + V(x, y+1, z) + V(x, y-1, z) + V(x, y, z+1) + V(x, y, z-1) - 6.0 * V(x, y, z);
+    // float laplacian = V(x, y+1, z) + V(x, y-1, z) + V(x, y, z+1) + V(x, y, z-1) - 4.0 * V(x, y, z);
 
-    float d2Vdx2 = (V(x+1, y, z) - 2 * v + V(x-1, y, z)) / pow(space_step, 2);
-    float d2Vdy2 = (V(x, y+1, z) - 2 * v + V(x, y-1, z)) / pow(space_step, 2);
-    float d2Vdz2 = (V(x, y, z+1) - 2 * v + V(x, y, z-1)) / pow(space_step, 2);
-
-    return D * (d2Vdx2 + d2Vdy2 + d2Vdz2) - (pow(u, 2) * v) + (a * (1 - v));
-}
-
-float dudt(int x, int y, int z) {
-    float u = U(x, y, z);
-
-    float d2Udx2 = (U(x+1, y, z) - 2 * u + U(x-1, y, z)) / pow(space_step, 2);
-    float d2Udy2 = (U(x, y+1, z) - 2 * u + U(x, y-1, z)) / pow(space_step, 2);
-    float d2Udz2 = (U(x, y, z+1) - 2 * u + U(x, y, z-1)) / pow(space_step, 2);
-
-    return (d2Udx2 + d2Udy2 + d2Udz2);
+    return Dv * laplacian + (U(x, y, z) * pow(V(x, y, z), 2.0)) - (F + k) * V(x, y, z);
 }
 
 void main() {
@@ -68,16 +53,18 @@ void main() {
     int y = location.y;
     int z = location.z;
 
+    float dUdt = dUdt(x, y, z);
+    float dVdt = dVdt(x, y, z);
+    if (paused) {
+        dUdt = 0.0;
+        dVdt = 0.0;
+    }
+    float uf = U(x, y, z) + dUdt * time_step;
+    float vf = V(x, y, z) + dVdt * time_step;
+
     // float ui = U(x, y, z);
-    // float vi = V(x, y, z);
-    // float dUdt = dUdt(x, y, z);
-    // float dVdt = dVdt(x, y, z);
-    // float uf = ui + dUdt * 0.01;
-    // float vf = vi + dVdt * 0.01;
+    // float delta = 0.4 * dudt(x, y, z);
+    // float uf = ui + dudt(x, y, z) * 0.1;
 
-    float ui = U(x, y, z);
-    float delta = 0.4 * dudt(x, y, z);
-    float uf = ui + dudt(x, y, z) * 0.1;
-
-    imageStore(grid, location, vec4(uf, 0.0, 0.0, 1.0));
+    imageStore(grid, location, vec4(uf, vf, 0.0, 1.0));
 }

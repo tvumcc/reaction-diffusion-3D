@@ -27,17 +27,21 @@ glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
 glm::vec3 camera_position = glm::vec3(2.0f, 0.0f, 4.5f);
 float pitch = 0.0f;
 float yaw = 90.0f;
-float radius = 2.0f;
+float radius = 1.0f;
+float threshold = 0.3f;
 
 unsigned int width = 100;
 unsigned int height = 100;
 unsigned int depth = 100;
 
-unsigned int MAX_WIDTH = 300;
-unsigned int MAX_HEIGHT = 300;
-unsigned int MAX_DEPTH = 300; 
-
 int alternate = 0;
+
+float a = 0.035f;
+float b = 0.065f;
+float Du = 0.08f;
+float Dv = 0.04f;
+bool paused = true;
+bool mouse = true;
 
 int main() {
 	float vertices[] = {
@@ -75,7 +79,10 @@ int main() {
 	std::cout << "Current Version: " << glGetString(GL_VERSION) << std::endl;
 	glfwSetCursorPosCallback(window, cursor_pos_callback);
 	glfwSetScrollCallback(window, scroll_callback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	if (mouse) 
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	else
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_PROGRAM_POINT_SIZE);
 
@@ -87,22 +94,26 @@ int main() {
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	// std::vector<std::vector<std::vector<std::vector<float>>>> v(width, std::vector<std::vector<std::vector<float>>>(height, std::vector<std::vector<float>>(depth, std::vector<float>(4, 0))));
 	std::vector<float> initial_conditions;
 
-	for (int i = 0; i < width; i++) {
+	for (int k = 0; k < depth; k++) {
 		for (int j = 0; j < height; j++) {
-			for (int k = 0; k < depth; k++) {
-				if (i*i*i + j*j*j + k*k*k <= 40*40*40) {
+			for (int i = 0; i < width; i++) {
+				int i1 = (i - 50);
+				int j1 = (j - 50);
+				int k1 = (k - 50);
+
+				if (i1*i1 + j1*j1 + k1*k1 <= 1*1) {
+					initial_conditions.push_back(1.0f);
 					initial_conditions.push_back(1.0f);
 				} else {
+					initial_conditions.push_back(1.0f);
 					initial_conditions.push_back(0.0f);
 				}
-
-				initial_conditions.push_back(0.0f);
 				initial_conditions.push_back(0.0f);
 				initial_conditions.push_back(0.0f);
 			}
@@ -147,11 +158,12 @@ int main() {
 	compute_shader.set_int("width", width);
 	compute_shader.set_int("height", height);
 	compute_shader.set_int("depth", depth);
-	compute_shader.set_float("a", 0.037f);
-	compute_shader.set_float("b", 0.06f);
-	compute_shader.set_float("D", 2.0f);
+	compute_shader.set_float("F", a);
+	compute_shader.set_float("k", b);
+	compute_shader.set_float("Du", Du);
+	compute_shader.set_float("Dv", Dv);
 	compute_shader.set_float("time_step", 0.5f);
-	compute_shader.set_float("space_step", 3.0f);
+	compute_shader.set_float("space_step", 1.0f);
 
 	// glDispatchCompute(width, height, depth);
 	// glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -166,8 +178,17 @@ int main() {
 		ImGui::NewFrame();
 
 		// ImGui Stuff Goes Here
-		// ImGui::Begin("Menu");
-		// ImGui::End();
+		ImGui::Begin("Menu");
+		ImGui::SliderFloat("Feed Rate", &a, 0.0f, 0.1f);
+		ImGui::SliderFloat("Kill Rate", &b, 0.0f, 0.1f);
+		ImGui::SliderFloat("Du", &Du, 0.0f, 0.5f);
+		ImGui::SliderFloat("Dv", &Dv, 0.0f, 0.5f);
+		ImGui::Checkbox("Paused", &paused);
+		if (ImGui::Button("Reset") || glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
+			glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
+		}
+		ImGui::End();
 
 		compute_shader.bind();
 		// compute_shader.set_int("alternate", alternate);
@@ -176,8 +197,11 @@ int main() {
 		// 	glDispatchCompute(width, height, 1);
 		// 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		// }
-		glDispatchCompute(width, height, depth);
-		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		compute_shader.set_bool("paused", paused);
+		for (int i = 0; i < 10; i++) {
+			glDispatchCompute(width, height, depth);
+			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		}
 		// alternate = !alternate;
 
 
@@ -191,7 +215,7 @@ int main() {
 		shader.bind();
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 proj = glm::perspective(90.0f, (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
+		glm::mat4 proj = glm::perspective(45.0f, (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
 		shader.set_mat4x4("model", model);
 		shader.set_mat4x4("view", view);
 		shader.set_mat4x4("proj", proj);
@@ -199,6 +223,7 @@ int main() {
 		shader.set_float("width", (float)width);
 		shader.set_float("height", (float)height);
 		shader.set_float("depth", (float)depth);
+		shader.set_float("threshold", threshold);
 
 		// mesh.draw(shader, GL_TRIANGLES);
 		glActiveTexture(GL_TEXTURE0);
@@ -222,6 +247,20 @@ int main() {
 
 void process_input(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);	
+	if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) threshold += 0.01f;
+	if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) threshold -= 0.01f;
+	if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		mouse = true;
+	}
+	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		mouse = false;
+	}
+
+	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+		paused = !paused;
+	}
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -248,10 +287,12 @@ void cursor_pos_callback(GLFWwindow*, double x_pos, double y_pos) {
 	last_x = (float)x_pos;
 	last_y = (float)y_pos;
 
-	yaw += x_offset;	
-	if (pitch + y_offset < 89.0f && pitch + y_offset > -89.0f) {
-		pitch += y_offset;
-	} 
+	if (!mouse) {
+		yaw += x_offset;	
+		if (pitch + y_offset < 89.0f && pitch + y_offset > -89.0f) {
+			pitch += y_offset;
+		} 
+	}
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
