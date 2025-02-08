@@ -4,8 +4,10 @@ out vec4 FragColor;
 in vec2 TexCoord;
 in vec3 Normal;
 in vec3 FragPos;
+in vec3 pos;
 
 flat in ivec3 grid_pos;
+flat in float tester;
 
 uniform sampler3D grid_tex;
 
@@ -40,9 +42,11 @@ void main() {
     // vec3 specular = 0.5 * pow(max(dot(normalize(cam_pos - FragPos), reflect(-normalize(lightPos - FragPos), normalize(Normal))), 0.0), 32) * lightColor;
 
     // float brightness = float(imageLoad(grid, grid_pos).r);
-    vec3 brightness = texture(grid_tex, vec3(float(grid_pos.x) / width, float(grid_pos.y) / height, float(grid_pos.z) / depth)).rgb;
+    // vec3 brightness = texture(grid_tex, vec3(float(grid_pos.x) / width, float(grid_pos.y) / height, float(grid_pos.z) / depth)).rgb;
+    vec3 brightness = texture(grid_tex, pos).rgb;
 
-    if (brightness.g < threshold) discard;
+    // if (brightness.g < threshold) discard;
 
-    FragColor = vec4(viridis(2.0 * brightness.g), 1.0);
+    // FragColor = vec4(viridis(2.0 * brightness.g), 1.0);
+    FragColor = vec4(vec3(tester / 256.0, 0.0, 0.0), 1.0);
 }

@@ -10,6 +10,7 @@
 
 #include "shader.hpp"
 #include "mesh.hpp"
+#include "marching_cubes.hpp"
 
 #include <iostream>
 
@@ -165,8 +166,25 @@ int main() {
 	compute_shader.set_float("time_step", 0.5f);
 	compute_shader.set_float("space_step", 1.0f);
 
-	// glDispatchCompute(width, height, depth);
-	// glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	shader.bind();
+
+	unsigned int edge_table_ssbo;
+	glGenBuffers(1, &edge_table_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, edge_table_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, edge_table.size() * sizeof(int), edge_table.data(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, edge_table_ssbo);
+
+	unsigned int vertex_table_ssbo;
+	glGenBuffers(1, &vertex_table_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, vertex_table_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, vertex_table.size() * sizeof(int), vertex_table.data(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, vertex_table_ssbo);
+
+	unsigned int triangle_table_ssbo;
+	glGenBuffers(1, &triangle_table_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, triangle_table_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, triangle_table.size() * sizeof(int), triangle_table.data(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, triangle_table_ssbo);
 
 	while (!glfwWindowShouldClose(window)) {
 		process_input(window);
@@ -183,6 +201,7 @@ int main() {
 		ImGui::SliderFloat("Kill Rate", &b, 0.0f, 0.1f);
 		ImGui::SliderFloat("Du", &Du, 0.0f, 0.5f);
 		ImGui::SliderFloat("Dv", &Dv, 0.0f, 0.5f);
+		ImGui::Text(std::to_string(threshold).c_str());
 		ImGui::Checkbox("Paused", &paused);
 		if (ImGui::Button("Reset") || glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
 			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
@@ -198,7 +217,7 @@ int main() {
 		// 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		// }
 		compute_shader.set_bool("paused", paused);
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < 5; i++) {
 			glDispatchCompute(width, height, depth);
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		}
@@ -296,7 +315,7 @@ void cursor_pos_callback(GLFWwindow*, double x_pos, double y_pos) {
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-	if (radius + yoffset > 0.0f) {
-		radius += yoffset;
+	if (radius + 0.1 * yoffset > 0.0f) {
+		radius += 0.1 * yoffset;
 	}
 }
