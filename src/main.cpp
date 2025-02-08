@@ -163,8 +163,8 @@ int main() {
 	compute_shader.set_float("k", b);
 	compute_shader.set_float("Du", Du);
 	compute_shader.set_float("Dv", Dv);
-	compute_shader.set_float("time_step", 0.5f);
-	compute_shader.set_float("space_step", 1.0f);
+	compute_shader.set_float("time_step", 0.2f);
+	compute_shader.set_float("space_step", 1.00f);
 
 	shader.bind();
 
@@ -217,7 +217,7 @@ int main() {
 		// 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		// }
 		compute_shader.set_bool("paused", paused);
-		for (int i = 0; i < 5; i++) {
+		for (int i = 0; i < 15; i++) {
 			glDispatchCompute(width, height, depth);
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		}
@@ -234,7 +234,7 @@ int main() {
 		shader.bind();
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 proj = glm::perspective(45.0f, (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
+		glm::mat4 proj = glm::perspective(45.0f, (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.01f, 100.0f);
 		shader.set_mat4x4("model", model);
 		shader.set_mat4x4("view", view);
 		shader.set_mat4x4("proj", proj);

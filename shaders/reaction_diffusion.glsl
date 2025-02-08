@@ -22,6 +22,8 @@ uniform bool paused;
 float U(int x, int y, int z) {
     if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth)
         return 0.0;
+    // if (pow(x-50, 2) + pow(y-50, 2) + pow(z-50, 2) > 20*20)
+    //     return 0.0;
 
     return imageLoad(grid, ivec3(x, y, z)).r;
 }
@@ -29,19 +31,21 @@ float U(int x, int y, int z) {
 float V(int x, int y, int z) {
     if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth)
         return 0.0;
+    // if (pow(x-50, 2) + pow(y-50, 2) + pow(z-50, 2) > 20*20)
+    //     return 0.0;
 
     return imageLoad(grid, ivec3(x, y, z)).g;
 }
 
 float dUdt(int x, int y, int z) {
-    float laplacian = U(x+1, y, z) + U(x-1, y, z) + U(x, y+1, z) + U(x, y-1, z) + U(x, y, z+1) + U(x, y, z-1) - 6.0 * U(x, y, z);
+    float laplacian = U(x+1, y, z) + U(x-1, y, z) + U(x, y+1, z) + U(x, y-1, z) + U(x, y, z+1) + U(x, y, z-1) - 6.0 * U(x, y, z) / (space_step * space_step);
     // float laplacian = U(x, y+1, z) + U(x, y-1, z) + U(x, y, z+1) + U(x, y, z-1) - 4.0 * U(x, y, z);
 
     return Du * laplacian - (U(x, y, z) * pow(V(x, y, z), 2.0)) + F * (1.0 - U(x, y, z));
 }
 
 float dVdt(int x, int y, int z) {
-    float laplacian = V(x+1, y, z) + V(x-1, y, z) + V(x, y+1, z) + V(x, y-1, z) + V(x, y, z+1) + V(x, y, z-1) - 6.0 * V(x, y, z);
+    float laplacian = V(x+1, y, z) + V(x-1, y, z) + V(x, y+1, z) + V(x, y-1, z) + V(x, y, z+1) + V(x, y, z-1) - 6.0 * V(x, y, z) / (space_step * space_step);
     // float laplacian = V(x, y+1, z) + V(x, y-1, z) + V(x, y, z+1) + V(x, y, z-1) - 4.0 * V(x, y, z);
 
     return Dv * laplacian + (U(x, y, z) * pow(V(x, y, z), 2.0)) - (F + k) * V(x, y, z);
