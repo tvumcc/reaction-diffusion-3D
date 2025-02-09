@@ -29,11 +29,11 @@ glm::vec3 camera_position = glm::vec3(2.0f, 0.0f, 4.5f);
 float pitch = 0.0f;
 float yaw = 90.0f;
 float radius = 1.0f;
-float threshold = 0.3f;
+float threshold = 0.2f;
 
-unsigned int width = 100;
-unsigned int height = 100;
-unsigned int depth = 100;
+unsigned int width = 128;
+unsigned int height = 128;
+unsigned int depth = 128;
 
 int alternate = 0;
 
@@ -73,7 +73,7 @@ int main() {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-	GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "OpenGL 4.6 Template", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Reaction Diffusion 3D", NULL, NULL);
 	glfwMakeContextCurrent(window);
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -86,6 +86,7 @@ int main() {
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_PROGRAM_POINT_SIZE);
+	glEnable(GL_CULL_FACE);
 
 	// Reaction Diffusion Texture
 
@@ -98,6 +99,14 @@ int main() {
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
+	std::vector<glm::vec3> initial_dots;
+	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0 - 40, depth / 2.0));
+	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0 + 40, depth / 2.0));
+	initial_dots.push_back(glm::vec3(width / 2.0 - 40, height / 2.0, depth / 2.0));
+	initial_dots.push_back(glm::vec3(width / 2.0 + 40, height / 2.0, depth / 2.0));
+	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0, depth / 2.0 + 40));
+	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0, depth / 2.0 - 40));
+
 	// std::vector<std::vector<std::vector<std::vector<float>>>> v(width, std::vector<std::vector<std::vector<float>>>(height, std::vector<std::vector<float>>(depth, std::vector<float>(4, 0))));
 	std::vector<float> initial_conditions;
 
@@ -108,7 +117,15 @@ int main() {
 				int j1 = (j - 50);
 				int k1 = (k - 50);
 
-				if (i1*i1 + j1*j1 + k1*k1 <= 1*1) {
+				bool is_dot = false;
+				for (auto dot : initial_dots) {
+					if ((i-(int)dot.x)*(i-(int)dot.x) + (j-(int)dot.y)*(j-(int)dot.y) + (k-(int)dot.z)*(k-(int)dot.z) <= 1*1) {
+						is_dot = true;
+						break;
+					}
+				}
+
+				if (is_dot) {
 					initial_conditions.push_back(1.0f);
 					initial_conditions.push_back(1.0f);
 				} else {
@@ -163,7 +180,7 @@ int main() {
 	compute_shader.set_float("k", b);
 	compute_shader.set_float("Du", Du);
 	compute_shader.set_float("Dv", Dv);
-	compute_shader.set_float("time_step", 0.2f);
+	compute_shader.set_float("time_step", 0.55f);
 	compute_shader.set_float("space_step", 1.00f);
 
 	shader.bind();
@@ -199,8 +216,6 @@ int main() {
 		ImGui::Begin("Menu");
 		ImGui::SliderFloat("Feed Rate", &a, 0.0f, 0.1f);
 		ImGui::SliderFloat("Kill Rate", &b, 0.0f, 0.1f);
-		ImGui::SliderFloat("Du", &Du, 0.0f, 0.5f);
-		ImGui::SliderFloat("Dv", &Dv, 0.0f, 0.5f);
 		ImGui::Text(std::to_string(threshold).c_str());
 		ImGui::Checkbox("Paused", &paused);
 		if (ImGui::Button("Reset") || glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
@@ -210,19 +225,13 @@ int main() {
 		ImGui::End();
 
 		compute_shader.bind();
-		// compute_shader.set_int("alternate", alternate);
-		// for (int i = 0; i < depth; i++) {
-		// 	compute_shader.set_int("depth_layer", i);
-		// 	glDispatchCompute(width, height, 1);
-		// 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-		// }
+		compute_shader.set_float("Du", Du);
+		compute_shader.set_float("Dv", Dv);
 		compute_shader.set_bool("paused", paused);
-		for (int i = 0; i < 15; i++) {
-			glDispatchCompute(width, height, depth);
+		for (int i = 0; i < 20; i++) {
+			glDispatchCompute(width / 8, height / 8, depth / 8);
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		}
-		// alternate = !alternate;
-
 
 		camera_position = glm::vec3(
 			position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
@@ -279,6 +288,13 @@ void process_input(GLFWwindow* window) {
 
 	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
 		paused = !paused;
+	}
+
+	if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS) {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
+	}
+	if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);	
 	}
 }
 

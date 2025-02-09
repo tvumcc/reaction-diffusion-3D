@@ -37,10 +37,10 @@ void main() {
     vec3 lightPos = vec3(1.0, 1.0, 1.0);
     vec3 lightColor = vec3(1.0, 1.0, 1.0);
 
-    vec3 cam_lighting = lightColor * max(0.0, dot(normalize(cam_pos - FragPos), -normalize(normal)));
-    // vec3 ambient = 0.4 * lightColor;
-    // vec3 diffuse = max(dot(normalize(Normal), normalize(lightPos - FragPos)), 0.0) * lightColor;
-    // vec3 specular = 0.5 * pow(max(dot(normalize(cam_pos - FragPos), reflect(-normalize(lightPos - FragPos), normalize(Normal))), 0.0), 32) * lightColor;
+    vec3 cam_lighting = lightColor * max(0.0, dot(normalize(cam_pos - FragPos), normalize(normal)));
+    vec3 ambient = 0.4 * lightColor;
+    vec3 diffuse = max(dot(normalize(Normal), normalize(lightPos - FragPos)), 0.0) * lightColor;
+    vec3 specular = 0.5 * pow(max(dot(normalize(cam_pos - FragPos), reflect(-normalize(lightPos - FragPos), normalize(Normal))), 0.0), 32) * lightColor;
 
     // float brightness = float(imageLoad(grid, grid_pos).r);
     // vec3 brightness = texture(grid_tex, vec3(float(grid_pos.x) / width, float(grid_pos.y) / height, float(grid_pos.z) / depth)).rgb;
@@ -50,6 +50,7 @@ void main() {
 
     // FragColor = vec4(viridis(2.0 * brightness.g), 1.0);
     // FragColor = vec4(vec3(tester / 256.0, 0.0, 0.0), 1.0);
-    // FragColor = vec4(normal * 0.5 + 0.5, 1.0);
-    FragColor = vec4(objectColor * cam_lighting, 1.0);
+    FragColor = vec4(normal * 0.5 + 0.5, 1.0);
+    // FragColor = vec4(objectColor * cam_lighting, 1.0);
+    // FragColor = vec4((ambient + diffuse + specular) * objectColor, 1.0);
 }

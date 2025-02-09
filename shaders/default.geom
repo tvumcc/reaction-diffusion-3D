@@ -71,9 +71,6 @@ void main() {
     int edge_mask = edge_table[cube_index];
     int tri_index = cube_index * 16;
 
-    float mx = 0.0;
-
-
     // Interpolate edge vertices
     for (int i = 0; i < 12; i++) {
         if (((edge_mask >> i) & 1) == 1) {
@@ -86,26 +83,19 @@ void main() {
             // interpolated[i] = (P1 + P2) / 2.0;
 
             // mx = max(mx, max(interpolated[i].x, max(interpolated[i].y, interpolated[i].z)));
-            mx = max(mx, interpolated[i].x);
 
             // interpolated[i] = P1 + (threshold - V1) * (P2 - P1) / (V2 - V1);
             interpolated[i] = mix(P1, P2, (threshold - V1) / (V2 - V1));
-            // interpolated_normals[i] = normalize(normals[vertex_table[i*2]] + (threshold - V1) * (normals[vertex_table[i*2+1]] - normals[vertex_table[i*2]]) / (V2 - V1));
-            // interpolated_normals[i] = (normals[vertex_table[i*2+1]] + normals[vertex_table[i*2]]) / 2.0;
+            // interpolated[i] = interp(P1, P2, V1, V2, threshold);
+            vec3 P = interpolated[i]; 
+            float delta = shift / 2.0;
+
+            normals[i].x = texture(grid_tex, P + vec3(delta, 0.0, 0.0)).g - texture(grid_tex, P - vec3(delta, 0.0, 0.0)).g;
+            normals[i].y = texture(grid_tex, P + vec3(0.0, delta, 0.0)).g - texture(grid_tex, P - vec3(0.0, delta, 0.0)).g;
+            normals[i].z = texture(grid_tex, P + vec3(0.0, 0.0, delta)).g - texture(grid_tex, P - vec3(0.0, 0.0, delta)).g;
+            normals[i] = -normalize(normals[i]);
         }
     }
-
-    // Generate vertex normals
-    for (int i = 0; i < 12; i++) {
-        vec3 P = interpolated[i]; 
-        float delta = shift;
-
-        normals[i].x = texture(grid_tex, P + vec3(delta, 0.0, 0.0)).g - texture(grid_tex, P - vec3(delta, 0.0, 0.0)).g;
-        normals[i].y = texture(grid_tex, P + vec3(0.0, delta, 0.0)).g - texture(grid_tex, P - vec3(0.0, delta, 0.0)).g;
-        normals[i].z = texture(grid_tex, P + vec3(0.0, 0.0, delta)).g - texture(grid_tex, P - vec3(0.0, 0.0, delta)).g;
-        normals[i] = normalize(normals[i]);
-    }
-
 
     for (int i = 0; i < 16; i += 3) {
         if (triangle_table[tri_index + i] == -1) break;
