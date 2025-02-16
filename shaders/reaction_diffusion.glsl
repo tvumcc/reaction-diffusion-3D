@@ -19,7 +19,6 @@ uniform bool paused;
 float U(int x, int y, int z) {
     if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth)
         return 0.0;
-    if (pow(x-(width/2.0), 2) + pow(y-(height/2.0), 2) + pow(z-(depth/2.0), 2) > pow(width/2.0, 2)) return 0.0;
 
     return imageLoad(grid, ivec3(x, y, z)).r;
 }
@@ -27,7 +26,6 @@ float U(int x, int y, int z) {
 float V(int x, int y, int z) {
     if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth)
         return 0.0;
-    if (pow(x-(width/2.0), 2) + pow(y-(height/2.0), 2) + pow(z-(depth/2.0), 2) > pow(width/2.0, 2)) return 0.0;
 
     return imageLoad(grid, ivec3(x, y, z)).g;
 }
