@@ -12,3 +12,6 @@
 [submodule "lib/tinyobjloader"]
 	path = lib/tinyobjloader
 	url = https://github.com/tinyobjloader/tinyobjloader.git
+[submodule "lib/voxelizer"]
+	path = lib/voxelizer
+	url = https://github.com/karimnaaji/voxelizer.git

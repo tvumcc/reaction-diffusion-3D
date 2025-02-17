@@ -46,11 +46,12 @@ void main() {
     // vec3 brightness = texture(grid_tex, vec3(float(grid_pos.x) / width, float(grid_pos.y) / height, float(grid_pos.z) / depth)).rgb;
     vec3 brightness = texture(grid_tex, pos).rgb;
 
-    // if (brightness.g < threshold) discard;
+    // if (brightness.b < threshold) discard;
 
     // FragColor = vec4(viridis(2.0 * brightness.g), 1.0);
     // FragColor = vec4(vec3(tester / 256.0, 0.0, 0.0), 1.0);
     FragColor = vec4(normal * 0.5 + 0.5, 1.0);
+    // FragColor = vec4(vec3(brightness.b), 1.0);
     // FragColor = vec4(objectColor * cam_lighting, 1.0);
     // FragColor = vec4((ambient + diffuse + specular) * objectColor, 1.0);
 }

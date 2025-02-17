@@ -6,13 +6,19 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <stb/stb_image.h>
+#include <tiny_obj_loader.h>
+#define VOXELIZER_IMPLEMENTATION
+#include <voxelizer/voxelizer.h>
 
 #include "shader.hpp"
 #include "mesh.hpp"
 #include "marching_cubes.hpp"
 
 #include <iostream>
+#include <string>
+#include <vector>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void process_input(GLFWwindow* window);
@@ -29,22 +35,27 @@ float yaw = 90.0f;
 float radius = 1.0f;
 float threshold = 0.2f;
 
-unsigned int width = 64;
-unsigned int height = 64;
-unsigned int depth = 64;
+unsigned int width = 128;
+unsigned int height = 128;
+unsigned int depth = 128;
 unsigned int work_group_size = 8;
 
 int alternate = 0;
 unsigned int gui_width = 300;
 
-float a = 0.028f;
-float b = 0.062f;
+float a = 0.035f;
+float b = 0.065f;
 float Du = 0.08f;
 float Dv = 0.04f;
 bool paused = true;
 bool mouse = true;
 
 double last_frame;
+
+struct MarchingCubeVertex {
+	alignas(8) glm::vec3 pos;
+	alignas(8) glm::vec3 normal;
+};
 
 int main() {
 	glfwInit();
@@ -62,7 +73,7 @@ int main() {
 	};
     glfwSetFramebufferSizeCallback(window, resize_window);
 	resize_window(window, WINDOW_WIDTH, WINDOW_HEIGHT);
-	// glfwSetCursorPosCallback(window, cursor_pos_callback);
+	glfwSetCursorPosCallback(window, cursor_pos_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 	if (mouse) 
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -72,6 +83,41 @@ int main() {
 	glEnable(GL_PROGRAM_POINT_SIZE);
 	glEnable(GL_CULL_FACE);
 	last_frame = glfwGetTime();
+
+    // tinyobj::ObjReader reader;
+    // tinyobj::ObjReaderConfig reader_config;
+
+    // if (!reader.ParseFromFile("assets/bunny.obj", reader_config)) {
+    //     if (!reader.Error().empty())
+    //         std::cerr << "[ERROR] TinyObjReader: " << reader.Error();
+    //     exit(1);
+    // }
+    // if (!reader.Warning().empty())
+    //     std::cout << "[WARNING] TinyObjReader: " << reader.Warning();
+
+    // auto& attrib = reader.GetAttrib();
+    // auto& shapes = reader.GetShapes();
+	// float res = 1.0 / width;
+	// float precision = 0.01;
+	// std::cout << "Shapes: " << shapes.size() << "\n";
+	// unsigned int* voxels;
+
+    // for (int s = 0; s < shapes.size(); s++) { // Loop through shapes
+    //     vx_mesh_t* mesh = vx_mesh_alloc(shapes[s].mesh.num_face_vertices.size(), shapes[s].mesh.indices.size());
+
+	// 	for (int v = 0; v < attrib.vertices.size() / 3; v++) {
+	// 		mesh->vertices[v].x = attrib.vertices[3 * size_t(v) + 0];
+	// 		mesh->vertices[v].y = attrib.vertices[3 * size_t(v) + 1];
+	// 		mesh->vertices[v].z = attrib.vertices[3 * size_t(v) + 2];
+	// 	}
+
+    //     for (size_t f = 0; f < shapes[s].mesh.indices.size(); f++) {
+    //         mesh->indices[f] = shapes[s].mesh.indices[f].vertex_index;
+    //     }
+
+	// 	voxels = vx_voxelize_snap_3dgrid(mesh, width, height, depth);
+	// 	break;
+	// }
 
 	unsigned int texture;
 	glGenTextures(1, &texture);
@@ -104,28 +150,37 @@ int main() {
 
 				initial_conditions.push_back(1.0f);
 				initial_conditions.push_back(is_dot ? 1.0f : 0.0f);
+				size_t idx = i + j * width + k * (width * height);
+				// initial_conditions.push_back(voxels[idx] != 0 ? 1.0f : 0.0f);
 				initial_conditions.push_back(0.0f);
 				initial_conditions.push_back(0.0f);
 			}
 		}
 	}
+	
+	// int count = 0;
+	// for (int i = 0; i < width * height * depth; i++) {
+	// 	if (voxels[i] != 0) count++;
+	// }
+	// std::cout << "Voxels: " << count << "\n";
+
 	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
 	glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
 
-	std::vector<Vertex> rd_mesh_vertices;
-	for (int i = 0; i < width; i++) {
-		for (int j = 0; j < height; j++) {
-			for (int k = 0; k < depth; k++) {
-				Vertex vertex = {
-					glm::vec3(i / (float)width, j / (float)height, k / (float)depth),
-					glm::vec2(0.0, 0.0),
-					glm::vec3(0.0, 0.0, 0.0)
-				};
-				rd_mesh_vertices.push_back(vertex);
-			}
-		}
-	}
-	Mesh rd(rd_mesh_vertices);
+	// std::vector<Vertex> rd_mesh_vertices;
+	// for (int i = 0; i < width; i++) {
+	// 	for (int j = 0; j < height; j++) {
+	// 		for (int k = 0; k < depth; k++) {
+	// 			Vertex vertex = {
+	// 				glm::vec3(i / (float)width, j / (float)height, k / (float)depth),
+	// 				glm::vec2(0.0, 0.0),
+	// 				glm::vec3(0.0, 0.0, 0.0)
+	// 			};
+	// 			rd_mesh_vertices.push_back(vertex);
+	// 		}
+	// 	}
+	// }
+	// Mesh rd(rd_mesh_vertices);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -135,7 +190,8 @@ int main() {
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 460");
 
-	Shader shader("shaders/default.vert", "shaders/default.frag", "shaders/default.geom");
+	// Shader shader("shaders/default.vert", "shaders/default.frag", "shaders/default.geom");
+	Shader shader("shaders/default.vert", "shaders/default.frag");
     shader.bind();
 	shader.set_int("grid_tex", 0);
 
@@ -144,10 +200,33 @@ int main() {
 	compute_shader.set_int("width", width);
 	compute_shader.set_int("height", height);
 	compute_shader.set_int("depth", depth);
-	compute_shader.set_float("time_step", 0.25f);
+	compute_shader.set_float("time_step", 0.55f);
 	compute_shader.set_float("space_step", 1.00f);
 
+	ComputeShader marching_cubes("shaders/marching_cubes.glsl");
+	marching_cubes.bind();
+	marching_cubes.set_float("width", (float)width);
+	marching_cubes.set_float("height", (float)height);
+	marching_cubes.set_float("depth", (float)depth);
+	marching_cubes.set_int("grid_tex", 0);
+
 	shader.bind();
+	
+	// will be bound as both a VBO and SSBO, for generating and rendering vertices
+	unsigned int grid_vbo, grid_vao;
+	glGenVertexArrays(1, &grid_vao);
+	glBindVertexArray(grid_vao);
+
+	glGenBuffers(1, &grid_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, grid_vbo);
+	glBufferData(GL_ARRAY_BUFFER, 15 * width * height * depth * sizeof(MarchingCubeVertex), NULL, GL_STATIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, grid_vbo);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MarchingCubeVertex), (void*)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(MarchingCubeVertex), (void*)offsetof(MarchingCubeVertex, normal));
+	glEnableVertexAttribArray(1);
+
 
 	unsigned int edge_table_ssbo;
 	glGenBuffers(1, &edge_table_ssbo);
@@ -216,7 +295,14 @@ int main() {
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		}
 
-		yaw += 0.5;
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_3D, texture);
+		marching_cubes.bind();
+		marching_cubes.set_float("threshold", threshold);
+		glDispatchCompute(width / work_group_size, height / work_group_size, depth / work_group_size);
+		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+
+		// yaw += 0.5;
 
 		camera_position = glm::vec3(
 			position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
@@ -238,9 +324,10 @@ int main() {
 		shader.set_float("depth", (float)depth);
 		shader.set_float("threshold", threshold);
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_3D, texture);
-		rd.draw(shader, GL_POINTS);
+
+		glBindVertexArray(grid_vao);
+		glDrawArrays(GL_TRIANGLES, 0, 15 * width * height * depth);
+		// rd.draw(shader, GL_POINTS);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

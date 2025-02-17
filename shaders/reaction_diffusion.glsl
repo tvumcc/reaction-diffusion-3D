@@ -19,12 +19,16 @@ uniform bool paused;
 float U(int x, int y, int z) {
     if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth)
         return 0.0;
+    if (imageLoad(grid, ivec3(x, y, z)).b > 0.0)
+        return 0.0;
 
     return imageLoad(grid, ivec3(x, y, z)).r;
 }
 
 float V(int x, int y, int z) {
     if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= depth)
+        return 0.0;
+    if (imageLoad(grid, ivec3(x, y, z)).b > 0.0)
         return 0.0;
 
     return imageLoad(grid, ivec3(x, y, z)).g;
@@ -56,6 +60,7 @@ void main() {
     }
     float uf = U(x, y, z) + dUdt * time_step;
     float vf = V(x, y, z) + dVdt * time_step;
+    float boundary_condition = imageLoad(grid, ivec3(x, y, z)).b;
 
-    imageStore(grid, location, vec4(uf, vf, 0.0, 0.0));
+    imageStore(grid, location, vec4(uf, vf, boundary_condition, 0.0));
 }
