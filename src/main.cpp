@@ -79,6 +79,8 @@ int main() {
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	else
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwWindowHint(GLFW_SAMPLES, 8);
+	glEnable(GL_MULTISAMPLE);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_PROGRAM_POINT_SIZE);
 	glEnable(GL_CULL_FACE);
@@ -219,7 +221,7 @@ int main() {
 
 	glGenBuffers(1, &grid_vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, grid_vbo);
-	glBufferData(GL_ARRAY_BUFFER, 15 * width * height * depth * sizeof(MarchingCubeVertex), NULL, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, 15 * (width / 2) * (height / 2) * (depth / 2) * sizeof(MarchingCubeVertex), NULL, GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, grid_vbo);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MarchingCubeVertex), (void*)0);
@@ -290,7 +292,7 @@ int main() {
 		compute_shader.set_float("F", a);
 		compute_shader.set_float("k", b);
 		compute_shader.set_bool("paused", paused);
-		for (int i = 0; i < 20; i++) {
+		for (int i = 0; i < 3; i++) {
 			glDispatchCompute(width / work_group_size, height / work_group_size, depth / work_group_size);
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		}
@@ -299,7 +301,7 @@ int main() {
 		glBindTexture(GL_TEXTURE_3D, texture);
 		marching_cubes.bind();
 		marching_cubes.set_float("threshold", threshold);
-		glDispatchCompute(width / work_group_size, height / work_group_size, depth / work_group_size);
+		glDispatchCompute((width / 2) / work_group_size, (height / 2) / work_group_size, (depth / 2) / work_group_size);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
 
 		// yaw += 0.5;
@@ -319,11 +321,6 @@ int main() {
 		shader.set_mat4x4("view", view);
 		shader.set_mat4x4("proj", proj);
 		shader.set_vec3("cam_pos", camera_position);
-		shader.set_float("width", (float)width);
-		shader.set_float("height", (float)height);
-		shader.set_float("depth", (float)depth);
-		shader.set_float("threshold", threshold);
-
 
 		glBindVertexArray(grid_vao);
 		glDrawArrays(GL_TRIANGLES, 0, 15 * width * height * depth);

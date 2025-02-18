@@ -18,10 +18,10 @@ uniform float threshold;
 uniform sampler3D grid_tex;
 
 void main() {
-    vec3 pos = vec3(gl_GlobalInvocationID.x / width, gl_GlobalInvocationID.y / height, gl_GlobalInvocationID.z / depth);
+    vec3 pos = 2.0 * vec3(gl_GlobalInvocationID.x / width, gl_GlobalInvocationID.y / height, gl_GlobalInvocationID.z / depth);
     ivec3 loc = ivec3(gl_GlobalInvocationID.xyz);
 
-    float shift = 1.0 / (width);
+    float shift = 2.0 / (width);
 
     vec3 shifts[8] = vec3[](
         vec3(0.0, 0.0, 0.0),
@@ -54,7 +54,6 @@ void main() {
             float V1 = texture(grid_tex, P1).g;
             float V2 = texture(grid_tex, P2).g;
 
-
             interpolated[i] = mix(P1, P2, (threshold - V1) / (V2 - V1));
 
             // Use gradients to compute the normal vectors
@@ -68,7 +67,7 @@ void main() {
     }
 
     for (int i = 0; i < 15; i += 3) {
-        int idx = (loc.x + loc.y * int(height) + loc.z * int(width) * int(height)) * 15;
+        int idx = (loc.x + loc.y * int(height / 2.0) + loc.z * int(width / 2.0) * int(height / 2.0)) * 15;
         if (triangle_table[tri_index + i] != -1) {
             vertices[idx + i + 0].pos    = interpolated[triangle_table[tri_index + i + 0]];
             vertices[idx + i + 0].normal = normals[triangle_table[tri_index + i + 0]];
