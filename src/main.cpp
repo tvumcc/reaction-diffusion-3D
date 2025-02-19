@@ -24,6 +24,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void process_input(GLFWwindow* window);
 void cursor_pos_callback(GLFWwindow*, double x_pos, double y_pos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 unsigned int WINDOW_WIDTH = 1100;
 unsigned int WINDOW_HEIGHT = 800;
@@ -39,6 +40,10 @@ unsigned int width = 128;
 unsigned int height = 128;
 unsigned int depth = 128;
 unsigned int work_group_size = 8;
+int grid_resolution = 128;
+int mesh_resolution = 64;
+int dispatches_per_frame = 3;
+int slice_depth = 0;
 
 int alternate = 0;
 unsigned int gui_width = 300;
@@ -49,8 +54,11 @@ float Du = 0.08f;
 float Dv = 0.04f;
 bool paused = true;
 bool mouse = true;
+bool wireframe = false;
+bool interpolation = true;
 
 double last_frame;
+std::vector<float> fps_tracker;
 
 struct MarchingCubeVertex {
 	alignas(8) glm::vec3 pos;
@@ -75,11 +83,12 @@ int main() {
 	resize_window(window, WINDOW_WIDTH, WINDOW_HEIGHT);
 	glfwSetCursorPosCallback(window, cursor_pos_callback);
 	glfwSetScrollCallback(window, scroll_callback);
+	glfwSetKeyCallback(window, key_callback);
 	if (mouse) 
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	else
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	glfwWindowHint(GLFW_SAMPLES, 8);
+	glfwWindowHint(GLFW_SAMPLES, 16);
 	glEnable(GL_MULTISAMPLE);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_PROGRAM_POINT_SIZE);
@@ -160,42 +169,63 @@ int main() {
 		}
 	}
 	
-	// int count = 0;
-	// for (int i = 0; i < width * height * depth; i++) {
-	// 	if (voxels[i] != 0) count++;
-	// }
-	// std::cout << "Voxels: " << count << "\n";
-
 	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
 	glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
 
-	// std::vector<Vertex> rd_mesh_vertices;
-	// for (int i = 0; i < width; i++) {
-	// 	for (int j = 0; j < height; j++) {
-	// 		for (int k = 0; k < depth; k++) {
-	// 			Vertex vertex = {
-	// 				glm::vec3(i / (float)width, j / (float)height, k / (float)depth),
-	// 				glm::vec2(0.0, 0.0),
-	// 				glm::vec3(0.0, 0.0, 0.0)
-	// 			};
-	// 			rd_mesh_vertices.push_back(vertex);
-	// 		}
-	// 	}
-	// }
-	// Mesh rd(rd_mesh_vertices);
+	std::cout << "reached point 1 \n";
+
+	unsigned int slice_fbo;
+	glGenFramebuffers(1, &slice_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, slice_fbo);
+
+	unsigned int slice_texture;
+	glGenTextures(1, &slice_texture);
+	glBindTexture(GL_TEXTURE_2D, slice_texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, width, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, slice_texture, 0);
+
+	float vertices[] = {
+		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,   // top right
+		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom right
+		-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom left
+		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,    // top left 
+	};
+
+	unsigned int indices[] = {
+		0, 1, 2,
+		2, 3, 0
+	};
+
+	unsigned int slice_vao, slice_vbo, slice_ebo;
+	glGenVertexArrays(1, &slice_vao);
+	glBindVertexArray(slice_vao);
+
+	glGenBuffers(1, &slice_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, slice_vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+	glGenBuffers(1, &slice_ebo);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, slice_ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.IniFilename = NULL;
+	io.IniFilename = NULL;	
+	io.Fonts->AddFontFromFileTTF("assets/NotoSans.ttf", 20);
 	ImGui::StyleColorsDark();
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 460");
-
-	// Shader shader("shaders/default.vert", "shaders/default.frag", "shaders/default.geom");
-	Shader shader("shaders/default.vert", "shaders/default.frag");
-    shader.bind();
-	shader.set_int("grid_tex", 0);
 
 	ComputeShader compute_shader("shaders/reaction_diffusion.glsl");
 	compute_shader.bind();
@@ -212,7 +242,9 @@ int main() {
 	marching_cubes.set_float("depth", (float)depth);
 	marching_cubes.set_int("grid_tex", 0);
 
-	shader.bind();
+	Shader shader("shaders/default.vert", "shaders/default.frag");
+    shader.bind();
+	shader.set_int("grid_tex", 0);
 	
 	// will be bound as both a VBO and SSBO, for generating and rendering vertices
 	unsigned int grid_vbo, grid_vao;
@@ -248,9 +280,16 @@ int main() {
 	glBufferData(GL_SHADER_STORAGE_BUFFER, triangle_table.size() * sizeof(int), triangle_table.data(), GL_STATIC_READ);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, triangle_table_ssbo);
 
+	Shader slice_shader("shaders/slice.vert", "shaders/slice.frag");
+
 	while (!glfwWindowShouldClose(window)) {
 		double curr_frame = glfwGetTime();
 		double fps = 1.0 / (curr_frame - last_frame);
+		if (fps_tracker.size() >= 100) {
+			fps_tracker.erase(fps_tracker.begin());
+		}
+		fps_tracker.push_back(fps);
+
 		last_frame = curr_frame;
 
 		process_input(window);
@@ -271,19 +310,46 @@ int main() {
 		ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 8.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
-		ImGui::Begin("Menu");
-		ImGui::Text(("Current FPS: " + std::to_string((int)fps)).c_str());
-		ImGui::SliderFloat("Feed Rate", &a, 0.0f, 0.1f);
-		ImGui::SliderFloat("Kill Rate", &b, 0.0f, 0.1f);
-		ImGui::Text(std::to_string(threshold).c_str());
+		ImGui::Begin("Reaction Diffusion 3D", 0, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+		if (!mouse) ImGui::BeginDisabled();
+		std::string fps_tracker_overlay = std::to_string((int)fps) + " FPS";
+		ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
+		ImGui::PlotLines("##FPS Meter", fps_tracker.data(), fps_tracker.size(), 0, fps_tracker_overlay.c_str(), 0.0f, 100.0f, ImVec2(0.0f, 80.0f));
+		ImGui::PopItemWidth();
+		ImGui::SeparatorText("Keyboard Controls");
+		ImGui::Text("R - Toggle Mouse Camera Rotation");
+		ImGui::Text("Q - (Un)pause Simulation");
+		ImGui::Text("Esc - Close Program");
+
+		ImGui::SeparatorText("Simulation");
 		ImGui::Checkbox("Paused", &paused);
+		ImGui::SameLine();
 		if (ImGui::Button("Reset") || glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
 			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
 			glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
 		}
+		ImGui::SliderFloat("Feed Rate", &a, 0.0f, 0.1f);
+		ImGui::SliderFloat("Kill Rate", &b, 0.0f, 0.1f);
+		if (ImGui::SliderInt("Resolution ##Grid", &grid_resolution, 10, 128)) mesh_resolution = std::min(mesh_resolution, grid_resolution);
+		ImGui::SliderInt("Steps/Frame", &dispatches_per_frame, 1, 50);
+
+		ImGui::SeparatorText("Boundary Conditions");
+		ImGui::Button("Import .obj");
+		ImGui::SameLine();
+		ImGui::Button("Clear");
+
+		ImGui::SeparatorText("Mesh Generation");	
+		if (ImGui::SliderInt("Slice", &slice_depth, 0, width-1)) slice_depth = std::min(slice_depth, (int)width-1);
+		ImGui::Image((ImTextureID)slice_texture, ImVec2(gui_width - 20, gui_width - 20));
+
+		ImGui::SliderFloat("Threshold", &threshold, 0.0f, 1.0f);
+		ImGui::SliderInt("Resolution ##Mesh", &mesh_resolution, 10, grid_resolution);
+		ImGui::Checkbox("Wireframe", &wireframe);
+		ImGui::Checkbox("Scalar Field Interpolation", &interpolation);
 
 		ImGui::PopStyleColor(2);
 		ImGui::PopStyleVar(3);
+		if (!mouse) ImGui::EndDisabled();
 		ImGui::End();
 
 		compute_shader.bind();
@@ -292,7 +358,7 @@ int main() {
 		compute_shader.set_float("F", a);
 		compute_shader.set_float("k", b);
 		compute_shader.set_bool("paused", paused);
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < dispatches_per_frame; i++) {
 			glDispatchCompute(width / work_group_size, height / work_group_size, depth / work_group_size);
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		}
@@ -304,14 +370,31 @@ int main() {
 		glDispatchCompute((width / 2) / work_group_size, (height / 2) / work_group_size, (depth / 2) / work_group_size);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
 
-		// yaw += 0.5;
-
 		camera_position = glm::vec3(
 			position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
 			position.y + radius * glm::sin(glm::radians(pitch)),
 			position.z + radius * glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch))
 		);
 
+		glBindFramebuffer(GL_FRAMEBUFFER, slice_fbo);
+		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);	
+
+		slice_shader.bind();
+		glDisable(GL_CULL_FACE);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_3D, texture);
+		glViewport(0, 0, width, width);
+		slice_shader.set_int("slice_depth", slice_depth);
+		slice_shader.set_int("grid_resolution", width);
+		slice_shader.set_int("grid_tex", 0);
+		glBindVertexArray(slice_vao);
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);	
+		glEnable(GL_CULL_FACE);
+		glViewport(0, 0, WINDOW_WIDTH - gui_width, WINDOW_HEIGHT);
 
 		shader.bind();
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
@@ -324,7 +407,6 @@ int main() {
 
 		glBindVertexArray(grid_vao);
 		glDrawArrays(GL_TRIANGLES, 0, 15 * width * height * depth);
-		// rd.draw(shader, GL_POINTS);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -342,25 +424,18 @@ int main() {
 }
 
 void process_input(GLFWwindow* window) {
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);	
-	if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) threshold += 0.01f;
-	if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) threshold -= 0.01f;
-	if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-		mouse = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-		mouse = false;
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+		mouse = !mouse;
+		glfwSetInputMode(window, GLFW_CURSOR, mouse ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
 	}
 
-	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-		paused = !paused;
-	if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
-	if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);	
+	if (key == GLFW_KEY_Q && action == GLFW_PRESS) paused = !paused;
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
 }
+
 
 void cursor_pos_callback(GLFWwindow*, double x_pos, double y_pos) {
 	static float last_x = (float)WINDOW_WIDTH / 2.0;
