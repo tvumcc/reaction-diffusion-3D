@@ -22,8 +22,4 @@ vec3 viridis(float t) {
 void main() {
     vec4 brightness = texture(grid_tex, vec3(uv.x, uv.y, float(slice_depth) / float(grid_resolution)));
     FragColor = vec4(viridis(brightness.g), 1.0);
-    // FragColor = vec4(gl_FragCoord.x / float(grid_resolution), gl_FragCoord.y / float(grid_resolution), 0.0, 1.0);
-
-    // FragColor = vec4(1.0, 0.0, 0.0, 1.0);
-    // FragColor = vec4(float(slice_depth) / float(grid_resolution), 0.0, 0.0, 1.0);
 }

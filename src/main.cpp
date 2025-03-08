@@ -11,6 +11,7 @@
 #include <tiny_obj_loader.h>
 #define VOXELIZER_IMPLEMENTATION
 #include <voxelizer/voxelizer.h>
+#include <nfd.h>
 
 #include "shader.hpp"
 #include "mesh.hpp"
@@ -36,10 +37,7 @@ float yaw = 90.0f;
 float radius = 1.0f;
 float threshold = 0.2f;
 
-unsigned int width = 128;
-unsigned int height = 128;
-unsigned int depth = 128;
-unsigned int work_group_size = 8;
+unsigned int work_group_size = 1;
 int grid_resolution = 128;
 int mesh_resolution = 64;
 int dispatches_per_frame = 3;
@@ -57,13 +55,130 @@ bool mouse = true;
 bool wireframe = false;
 bool interpolation = true;
 
+float vertices[] = {
+	 1.0f,  1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,   // top right
+	 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom right
+	-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom left
+	-1.0f,  1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,    // top left 
+};
+
+unsigned int indices[] = {
+	0, 1, 2,
+	2, 3, 0
+};
+
 double last_frame;
 std::vector<float> fps_tracker;
+
+std::vector<float> initial_conditions = std::vector<float>(grid_resolution * grid_resolution * grid_resolution * 4, 0.0f);
+
+unsigned texture;
+unsigned slice_fbo, slice_texture;
+unsigned int grid_vbo, grid_vao;
 
 struct MarchingCubeVertex {
 	alignas(8) glm::vec3 pos;
 	alignas(8) glm::vec3 normal;
 };
+
+void clear_boundary_conditions() {
+	for (int i = 0; i < grid_resolution; i++) {
+		for (int j = 0; j < grid_resolution; j++) {
+			for (int k = 0; k < grid_resolution; k++) {
+				size_t idx = 4 * (i + j * grid_resolution + k * (grid_resolution * grid_resolution)) + 2;
+				initial_conditions[idx] = 0.0f; // Reset only the boundary condition component of the 3D grid
+			}
+		}
+	}	
+}
+
+void initialize_boundary_conditions(std::string filename) {
+    tinyobj::ObjReader reader;
+    tinyobj::ObjReaderConfig reader_config;
+
+    if (!reader.ParseFromFile(filename.c_str(), reader_config)) {
+        if (!reader.Error().empty())
+            std::cerr << "[ERROR] TinyObjReader: " << reader.Error();
+        exit(1);
+    }
+    if (!reader.Warning().empty())
+        std::cout << "[WARNING] TinyObjReader: " << reader.Warning();
+
+    auto& attrib = reader.GetAttrib();
+    auto& shapes = reader.GetShapes();
+	float res = 1.0 / grid_resolution;
+	float precision = 0.01;
+	unsigned int* voxels;
+
+    for (int s = 0; s < shapes.size(); s++) { // Loop through shapes
+        vx_mesh_t* mesh = vx_mesh_alloc(shapes[s].mesh.num_face_vertices.size(), shapes[s].mesh.indices.size());
+
+		for (int v = 0; v < attrib.vertices.size() / 3; v++) {
+			mesh->vertices[v].x = attrib.vertices[3 * size_t(v) + 0];
+			mesh->vertices[v].y = attrib.vertices[3 * size_t(v) + 1];
+			mesh->vertices[v].z = attrib.vertices[3 * size_t(v) + 2];
+		}
+
+        for (size_t f = 0; f < shapes[s].mesh.indices.size(); f++) {
+            mesh->indices[f] = shapes[s].mesh.indices[f].vertex_index;
+        }
+
+		voxels = vx_voxelize_snap_3dgrid(mesh, grid_resolution, grid_resolution, grid_resolution);
+		break;
+	}
+
+	for (int i = 0; i < grid_resolution; i++) {
+		for (int j = 0; j < grid_resolution; j++) {
+			for (int k = 0; k < grid_resolution; k++) {
+				size_t idx = i + j * grid_resolution + k * (grid_resolution * grid_resolution);
+				initial_conditions[4 * idx + 2] = voxels[idx] != 0 ? 1.0f : 0.0f; // Reset only the boundary condition component of the 3D grid
+			}
+		}
+	}
+}
+
+void initialize_initial_conditions(std::vector<glm::vec3> dots) {
+	for (int i = 0; i < grid_resolution; i++) {
+		for (int j = 0; j < grid_resolution; j++) {
+			for (int k = 0; k < grid_resolution; k++) {
+				bool is_dot = false;
+				for (auto dot : dots) {
+					if ((i-(int)dot.x)*(i-(int)dot.x) + (j-(int)dot.y)*(j-(int)dot.y) + (k-(int)dot.z)*(k-(int)dot.z) <= 1*1) {
+						is_dot = true;
+						break;
+					}
+				}
+
+				size_t idx = 4 * (i + j * grid_resolution + k * (grid_resolution * grid_resolution));
+				initial_conditions[idx] = 1.0f;
+				initial_conditions[idx + 1] = is_dot ? 1.0f : 0.0f;
+			}
+		}	
+	}	
+}
+
+void load_initial_conditions_to_texture() {
+	glBindTexture(GL_TEXTURE_3D, texture);
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, grid_resolution, grid_resolution, grid_resolution, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
+	glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
+}
+
+void resize_everything() {
+	initial_conditions = std::vector<float>(4 * grid_resolution * grid_resolution * grid_resolution, 0.0f);
+
+	initialize_initial_conditions(std::vector<glm::vec3>());
+	clear_boundary_conditions();
+
+	glBindTexture(GL_TEXTURE_3D, texture);
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, grid_resolution, grid_resolution, grid_resolution, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
+
+	glBindTexture(GL_TEXTURE_2D, slice_texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, grid_resolution, grid_resolution, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+
+	glBindBuffer(GL_ARRAY_BUFFER, grid_vbo);
+	glBufferData(GL_ARRAY_BUFFER, 15 * (grid_resolution / 2) * (grid_resolution / 2) * (grid_resolution / 2) * sizeof(MarchingCubeVertex), NULL, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, grid_vbo);
+}
 
 int main() {
 	glfwInit();
@@ -94,43 +209,8 @@ int main() {
 	glEnable(GL_PROGRAM_POINT_SIZE);
 	glEnable(GL_CULL_FACE);
 	last_frame = glfwGetTime();
-
-    // tinyobj::ObjReader reader;
-    // tinyobj::ObjReaderConfig reader_config;
-
-    // if (!reader.ParseFromFile("assets/bunny.obj", reader_config)) {
-    //     if (!reader.Error().empty())
-    //         std::cerr << "[ERROR] TinyObjReader: " << reader.Error();
-    //     exit(1);
-    // }
-    // if (!reader.Warning().empty())
-    //     std::cout << "[WARNING] TinyObjReader: " << reader.Warning();
-
-    // auto& attrib = reader.GetAttrib();
-    // auto& shapes = reader.GetShapes();
-	// float res = 1.0 / width;
-	// float precision = 0.01;
-	// std::cout << "Shapes: " << shapes.size() << "\n";
-	// unsigned int* voxels;
-
-    // for (int s = 0; s < shapes.size(); s++) { // Loop through shapes
-    //     vx_mesh_t* mesh = vx_mesh_alloc(shapes[s].mesh.num_face_vertices.size(), shapes[s].mesh.indices.size());
-
-	// 	for (int v = 0; v < attrib.vertices.size() / 3; v++) {
-	// 		mesh->vertices[v].x = attrib.vertices[3 * size_t(v) + 0];
-	// 		mesh->vertices[v].y = attrib.vertices[3 * size_t(v) + 1];
-	// 		mesh->vertices[v].z = attrib.vertices[3 * size_t(v) + 2];
-	// 	}
-
-    //     for (size_t f = 0; f < shapes[s].mesh.indices.size(); f++) {
-    //         mesh->indices[f] = shapes[s].mesh.indices[f].vertex_index;
-    //     }
-
-	// 	voxels = vx_voxelize_snap_3dgrid(mesh, width, height, depth);
-	// 	break;
-	// }
-
-	unsigned int texture;
+	
+	// Initialize the 3D texture for the grid
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_3D, texture);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -140,63 +220,29 @@ int main() {
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	std::vector<glm::vec3> initial_dots;
-	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0 - 10, depth / 2.0));
-	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0 + 10, depth / 2.0));
-	initial_dots.push_back(glm::vec3(width / 2.0 - 10, height / 2.0, depth / 2.0));
-	initial_dots.push_back(glm::vec3(width / 2.0 + 10, height / 2.0, depth / 2.0));
-	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0, depth / 2.0 + 10));
-	initial_dots.push_back(glm::vec3(width / 2.0, height / 2.0, depth / 2.0 - 10));
+	initial_dots.push_back(glm::vec3(grid_resolution / 2.0, grid_resolution / 2.0 - 10, grid_resolution / 2.0));
+	initial_dots.push_back(glm::vec3(grid_resolution / 2.0, grid_resolution / 2.0 + 10, grid_resolution / 2.0));
+	initial_dots.push_back(glm::vec3(grid_resolution / 2.0 - 10, grid_resolution / 2.0, grid_resolution / 2.0));
+	initial_dots.push_back(glm::vec3(grid_resolution / 2.0 + 10, grid_resolution / 2.0, grid_resolution / 2.0));
+	initial_dots.push_back(glm::vec3(grid_resolution / 2.0, grid_resolution / 2.0, grid_resolution / 2.0 + 10));
+	initial_dots.push_back(glm::vec3(grid_resolution / 2.0, grid_resolution / 2.0, grid_resolution / 2.0 - 10));
 
-	std::vector<float> initial_conditions;
-	for (int k = 0; k < depth; k++) {
-		for (int j = 0; j < height; j++) {
-			for (int i = 0; i < width; i++) {
-				bool is_dot = false;
-				for (auto dot : initial_dots) {
-					if ((i-(int)dot.x)*(i-(int)dot.x) + (j-(int)dot.y)*(j-(int)dot.y) + (k-(int)dot.z)*(k-(int)dot.z) <= 1*1) {
-						is_dot = true;
-						break;
-					}
-				}
+	initialize_initial_conditions(initial_dots);
+	std::cout << "Initializing boundary conditions from .obj file\n";
+	initialize_boundary_conditions("assets/bunny.obj");
+	load_initial_conditions_to_texture();	
 
-				initial_conditions.push_back(1.0f);
-				initial_conditions.push_back(is_dot ? 1.0f : 0.0f);
-				size_t idx = i + j * width + k * (width * height);
-				// initial_conditions.push_back(voxels[idx] != 0 ? 1.0f : 0.0f);
-				initial_conditions.push_back(0.0f);
-				initial_conditions.push_back(0.0f);
-			}
-		}
-	}
-	
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
-	glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
-
-	std::cout << "reached point 1 \n";
-
-	unsigned int slice_fbo;
+	// Initialize the FBO for the cross section viewer
 	glGenFramebuffers(1, &slice_fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, slice_fbo);
 
-	unsigned int slice_texture;
+	// Initialize the texture for the cross section viewer
 	glGenTextures(1, &slice_texture);
 	glBindTexture(GL_TEXTURE_2D, slice_texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, width, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, grid_resolution, grid_resolution, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, slice_texture, 0);
-
-	float vertices[] = {
-		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,   // top right
-		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom right
-		-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,   // bottom left
-		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,    // top left 
-	};
-
-	unsigned int indices[] = {
-		0, 1, 2,
-		2, 3, 0
-	};
 
 	unsigned int slice_vao, slice_vbo, slice_ebo;
 	glGenVertexArrays(1, &slice_vao);
@@ -229,17 +275,13 @@ int main() {
 
 	ComputeShader compute_shader("shaders/reaction_diffusion.glsl");
 	compute_shader.bind();
-	compute_shader.set_int("width", width);
-	compute_shader.set_int("height", height);
-	compute_shader.set_int("depth", depth);
+	compute_shader.set_int("grid_resolution", grid_resolution);
 	compute_shader.set_float("time_step", 0.55f);
 	compute_shader.set_float("space_step", 1.00f);
 
 	ComputeShader marching_cubes("shaders/marching_cubes.glsl");
 	marching_cubes.bind();
-	marching_cubes.set_float("width", (float)width);
-	marching_cubes.set_float("height", (float)height);
-	marching_cubes.set_float("depth", (float)depth);
+	marching_cubes.set_float("grid_resolution", (float)grid_resolution);
 	marching_cubes.set_int("grid_tex", 0);
 
 	Shader shader("shaders/default.vert", "shaders/default.frag");
@@ -247,13 +289,12 @@ int main() {
 	shader.set_int("grid_tex", 0);
 	
 	// will be bound as both a VBO and SSBO, for generating and rendering vertices
-	unsigned int grid_vbo, grid_vao;
 	glGenVertexArrays(1, &grid_vao);
 	glBindVertexArray(grid_vao);
 
 	glGenBuffers(1, &grid_vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, grid_vbo);
-	glBufferData(GL_ARRAY_BUFFER, 15 * (width / 2) * (height / 2) * (depth / 2) * sizeof(MarchingCubeVertex), NULL, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, 15 * (grid_resolution / 2) * (grid_resolution / 2) * (grid_resolution / 2) * sizeof(MarchingCubeVertex), NULL, GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, grid_vbo);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MarchingCubeVertex), (void*)0);
@@ -325,21 +366,43 @@ int main() {
 		ImGui::Checkbox("Paused", &paused);
 		ImGui::SameLine();
 		if (ImGui::Button("Reset") || glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
+			glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, grid_resolution, grid_resolution, grid_resolution, 0, GL_RGBA, GL_FLOAT, initial_conditions.data());
 			glBindImageTexture(0, texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
 		}
 		ImGui::SliderFloat("Feed Rate", &a, 0.0f, 0.1f);
 		ImGui::SliderFloat("Kill Rate", &b, 0.0f, 0.1f);
-		if (ImGui::SliderInt("Resolution ##Grid", &grid_resolution, 10, 128)) mesh_resolution = std::min(mesh_resolution, grid_resolution);
+		if (ImGui::SliderInt("Resolution ##Grid", &grid_resolution, 10, 128)) {
+			mesh_resolution = std::min(mesh_resolution, grid_resolution);
+			resize_everything();
+		}
 		ImGui::SliderInt("Steps/Frame", &dispatches_per_frame, 1, 50);
 
+		ImGui::SeparatorText("Initial Conditions");
+		if (ImGui::Button("Central Dot")) {
+			std::vector<glm::vec3> dots = {glm::vec3(grid_resolution / 2, grid_resolution / 2, grid_resolution / 2)};
+			initialize_initial_conditions(dots);
+			load_initial_conditions_to_texture();
+		}
+
 		ImGui::SeparatorText("Boundary Conditions");
-		ImGui::Button("Import .obj");
+		if (ImGui::Button("Import .obj")) {
+			nfdchar_t *outPath = NULL;		
+			nfdresult_t result = NFD_OpenDialog(NULL, NULL, &outPath);
+
+			clear_boundary_conditions();
+			initialize_boundary_conditions(outPath);
+			load_initial_conditions_to_texture();
+			
+			std::cout << "Selected path " << outPath << "\n";
+		}
 		ImGui::SameLine();
-		ImGui::Button("Clear");
+		if (ImGui::Button("Clear")) {
+			clear_boundary_conditions();
+			load_initial_conditions_to_texture();
+		}
 
 		ImGui::SeparatorText("Mesh Generation");	
-		if (ImGui::SliderInt("Slice", &slice_depth, 0, width-1)) slice_depth = std::min(slice_depth, (int)width-1);
+		if (ImGui::SliderInt("Slice", &slice_depth, 0, grid_resolution-1)) slice_depth = std::min(slice_depth, (int)grid_resolution-1);
 		ImGui::Image((ImTextureID)slice_texture, ImVec2(gui_width - 20, gui_width - 20));
 
 		ImGui::SliderFloat("Threshold", &threshold, 0.0f, 1.0f);
@@ -359,7 +422,7 @@ int main() {
 		compute_shader.set_float("k", b);
 		compute_shader.set_bool("paused", paused);
 		for (int i = 0; i < dispatches_per_frame; i++) {
-			glDispatchCompute(width / work_group_size, height / work_group_size, depth / work_group_size);
+			glDispatchCompute(grid_resolution / work_group_size, grid_resolution / work_group_size, grid_resolution / work_group_size);
 			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 		}
 
@@ -367,7 +430,7 @@ int main() {
 		glBindTexture(GL_TEXTURE_3D, texture);
 		marching_cubes.bind();
 		marching_cubes.set_float("threshold", threshold);
-		glDispatchCompute((width / 2) / work_group_size, (height / 2) / work_group_size, (depth / 2) / work_group_size);
+		glDispatchCompute((grid_resolution / 2) / work_group_size, (grid_resolution / 2) / work_group_size, (grid_resolution / 2) / work_group_size);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
 
 		camera_position = glm::vec3(
@@ -385,9 +448,9 @@ int main() {
 		glDisable(GL_CULL_FACE);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_3D, texture);
-		glViewport(0, 0, width, width);
+		glViewport(0, 0, grid_resolution, grid_resolution);
 		slice_shader.set_int("slice_depth", slice_depth);
-		slice_shader.set_int("grid_resolution", width);
+		slice_shader.set_int("grid_resolution", grid_resolution);
 		slice_shader.set_int("grid_tex", 0);
 		glBindVertexArray(slice_vao);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -406,7 +469,7 @@ int main() {
 		shader.set_vec3("cam_pos", camera_position);
 
 		glBindVertexArray(grid_vao);
-		glDrawArrays(GL_TRIANGLES, 0, 15 * width * height * depth);
+		glDrawArrays(GL_TRIANGLES, 0, 15 * grid_resolution * grid_resolution * grid_resolution);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

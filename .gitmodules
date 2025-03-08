@@ -15,3 +15,6 @@
 [submodule "lib/voxelizer"]
 	path = lib/voxelizer
 	url = https://github.com/karimnaaji/voxelizer.git
+[submodule "lib/nativefiledialog"]
+	path = lib/nativefiledialog
+	url = https://github.com/mlabbe/nativefiledialog.git

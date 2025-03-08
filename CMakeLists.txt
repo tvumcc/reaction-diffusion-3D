@@ -16,11 +16,16 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/lib/glm
 	${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui
 	${CMAKE_CURRENT_SOURCE_DIR}/lib/tinyobjloader
+	${CMAKE_CURRENT_SOURCE_DIR}/lib/nativefiledialog/src/include
+	${CMAKE_CURRENT_SOURCE_DIR}/lib/nativefiledialog/src/
 )
 
 file(GLOB_RECURSE SRC_FILES src/*.cpp)
+
 add_executable(${CMAKE_PROJECT_NAME}
 	${SRC_FILES}
+	lib/nativefiledialog/src/nfd_common.c
+	lib/nativefiledialog/src/nfd_win.cpp
 
 	# GLAD
 	lib/glad/src/glad.c
