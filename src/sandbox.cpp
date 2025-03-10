@@ -9,13 +9,19 @@
 #include <nfd.h>
 
 #include "sandbox.hpp"
+#include "mesh.hpp"
 
 #include <string>
 #include <iostream>
 
+#define UI_FONT_PATH "assets/NotoSans.ttf"
+#define UI_FONT_SIZE 20
+#define UI_SIDEBAR_WIDTH 300
+
 Sandbox::Sandbox(int window_width, int window_height) {
     initialize_window(window_width, window_height);
 	grid = std::make_unique<Grid>();
+	init_gui(UI_FONT_PATH, UI_FONT_SIZE);
 
     this->mouse = true;
 
@@ -33,10 +39,16 @@ Sandbox::~Sandbox() {
 	glfwTerminate();
 }
 
+/**
+ * Initialize the application window and OpenGL using GLFW and GLAD.
+ * 
+ * @param window_width The initial width of the application window
+ * @param window_height The initial height of the application window
+ */
 void Sandbox::initialize_window(int window_width, int window_height) {
     this->window_width = window_width;
     this->window_height = window_height;
-    this->ui_sidebar_width = 300;
+    this->ui_sidebar_width = UI_SIDEBAR_WIDTH;
 
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -64,52 +76,40 @@ void Sandbox::initialize_window(int window_width, int window_height) {
 	glEnable(GL_PROGRAM_POINT_SIZE);
 	glEnable(GL_CULL_FACE);
 	last_frame = glfwGetTime();
-
-	const std::string font_path = "assets/NotoSans.ttf";
-	const int font_size = 20;
-
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.IniFilename = NULL;	
-	io.Fonts->AddFontFromFileTTF(font_path.c_str(), font_size);
-	ImGui::StyleColorsDark();
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
-	ImGui_ImplOpenGL3_Init("#version 460");
 }
 
+/**
+ * Initiate the main loop of the application.
+ */
 void Sandbox::run() {
+	Mesh mesh("assets/donut.obj");
 	while (!glfwWindowShouldClose(window)) {
-		// Calculate Frame Rate
-		double curr_frame = glfwGetTime();
-		fps = 1.0 / (curr_frame - last_frame);
-		if (fps_tracker.size() >= 100) {
-			fps_tracker.erase(fps_tracker.begin());
-		}
-		fps_tracker.push_back(fps);
-		last_frame = curr_frame;
-
-		// Calculate Camera Position for Orbital Movement
-		camera_position = glm::vec3(
-			position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
-			position.y + radius * glm::sin(glm::radians(pitch)),
-			position.z + radius * glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch))
-		);
+		calculate_framerate();
+		calculate_camera_position();
 
 		render_gui();
-
 
 		glClearColor(0.7f, 0.7f, 0.7f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		grid->set_shader_uniforms();
-		set_camera_uniforms();
+		set_mesh_uniforms();
 		grid->integration_compute_dispatch();
 		grid->marching_cubes_compute_dispatch();
 
 		grid->draw_slice();
 		glViewport(0, 0, window_width - ui_sidebar_width, window_height);
 		grid->draw_mesh();
+
+		grid->mesh_shader.bind();
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.5, 0.5, 0.5));
+		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
+		grid->mesh_shader.set_mat4x4("model", model);
+		grid->mesh_shader.set_mat4x4("view", view);
+		grid->mesh_shader.set_mat4x4("proj", proj);
+		grid->mesh_shader.set_vec3("cam_pos", camera_position);
+		mesh.draw(grid->mesh_shader, GL_TRIANGLES);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -119,7 +119,10 @@ void Sandbox::run() {
 	}
 }
 
-void Sandbox::set_camera_uniforms() {
+/**
+ * Set the uniforms needed by the mesh shader for spatial transformation and lighting.
+ */
+void Sandbox::set_mesh_uniforms() {
 	grid->mesh_shader.bind();
 	glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 	glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -131,6 +134,52 @@ void Sandbox::set_camera_uniforms() {
 	grid->mesh_shader.set_int("grid_tex", 0);
 }
 
+/**
+ * Calculate the framerate by using the difference in time between the current
+ * frame and the previous frame.
+ */
+void Sandbox::calculate_framerate() {
+	double curr_frame = glfwGetTime();
+	fps = 1.0 / (curr_frame - last_frame);
+	if (fps_tracker.size() >= 100) {
+		fps_tracker.erase(fps_tracker.begin());
+	}
+	fps_tracker.push_back(fps);
+	last_frame = curr_frame;
+}
+
+/**
+ * Calculate the position of the camera in world space using Euler angles to allow
+ * for orbit movement around the generated mesh.
+ */
+void Sandbox::calculate_camera_position() {
+	camera_position = glm::vec3(
+		position.x + radius * glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch)),
+		position.y + radius * glm::sin(glm::radians(pitch)),
+		position.z + radius * glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch))
+	);
+}
+
+/**
+ * Initialize ImGui and set the font.
+ * 
+ * @param font_path The path to the .ttf file containing the font to use for the UI
+ * @param font_size The desired size of the font specified by font_path
+ */
+void Sandbox::init_gui(std::string font_path, int font_size) {
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.IniFilename = NULL;	
+	io.Fonts->AddFontFromFileTTF(font_path.c_str(), font_size);
+	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 460");
+}
+
+/**
+ * Render the left UI sidebar using ImGui.
+ */
 void Sandbox::render_gui() {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -174,7 +223,7 @@ void Sandbox::render_gui() {
 
 	ImGui::SeparatorText("Initial Conditions");
 	if (ImGui::Button("Central Dot")) {
-		std::vector<glm::vec3> dots = {glm::vec3(grid->grid_resolution / 2, grid->grid_resolution / 2, grid->grid_resolution / 2)};
+		std::vector<glm::vec3> dots = {glm::vec3(grid->grid_resolution / 2 + 25, grid->grid_resolution / 2, grid->grid_resolution / 2)};
 		grid->gen_initial_conditions(dots);
 		grid->load_data_to_texture();
 	}
@@ -184,9 +233,11 @@ void Sandbox::render_gui() {
 		nfdchar_t *outPath = NULL;		
 		nfdresult_t result = NFD_OpenDialog(NULL, NULL, &outPath);
 
-		grid->clear_boundary_conditions();
-		grid->gen_boundary_conditions(outPath);
-		grid->load_data_to_texture();
+		if (outPath != NULL) {
+			grid->clear_boundary_conditions();
+			grid->gen_boundary_conditions(outPath);
+			grid->load_data_to_texture();
+		}
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Clear")) {
@@ -208,7 +259,15 @@ void Sandbox::render_gui() {
 	ImGui::End();
 }
 
-void resize_callback(GLFWwindow* window, int width, int height) {
+/**
+ * Called when the window/framebuffer is resized. Resizes the viewport and updates
+ * window_width and window_height.
+ * 
+ * @param window Handle to the GLFW window
+ * @param width New width of the window
+ * @param height New height of the window
+ */
+void Sandbox::resize_callback(GLFWwindow* window, int width, int height) {
     Sandbox* sandbox = (Sandbox*)glfwGetWindowUserPointer(window); 
 
     sandbox->window_width = width;
@@ -216,7 +275,16 @@ void resize_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, sandbox->window_width - sandbox->ui_sidebar_width, sandbox->window_height);
 }
 
-void cursor_pos_callback(GLFWwindow* window, double x, double y) {
+/**
+ * Called when the cursor position changes. Updates the camera rotation where
+ * differences in the y-coordinate affect pitch and difference in the x-coordinate
+ * affect yaw.
+ * 
+ * @param window Handle to the GLFW window
+ * @param x New x-coordinate of the cursor
+ * @param y New y-coordinate of the cursor
+ */
+void Sandbox::cursor_pos_callback(GLFWwindow* window, double x, double y) {
     Sandbox* sandbox = (Sandbox*)glfwGetWindowUserPointer(window); 
 
 	static float last_x = (float)sandbox->window_width / 2.0;
@@ -243,13 +311,30 @@ void cursor_pos_callback(GLFWwindow* window, double x, double y) {
 
 }
 
-void scroll_callback(GLFWwindow* window, double dx, double dy) {
+/**
+ * Called when the mouse wheel is scrolled. Allows for moving the camera closer
+ * to or farther away from the mesh.
+ * 
+ * @param window Handle to the GLFW window
+ * @param dx Change in the x-coordinate of the mouse wheel
+ * @param dy Change in the y-coordinate of the mouse wheel
+ */
+void Sandbox::scroll_callback(GLFWwindow* window, double dx, double dy) {
     Sandbox* sandbox = (Sandbox*)glfwGetWindowUserPointer(window); 
 
 	if (sandbox->radius + 0.1 * dy > 0.0f) sandbox->radius += 0.1 * dy;
 }
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+/**
+ * Called when a key is interacted with. Performs miscellanous actions.
+ * 
+ * @param window Handle to the GLFW window
+ * @param key The key that was pressed
+ * @param scancode The scancode of the key that was pressed
+ * @param action The way that this key was activated
+ * @param mods Modifers that were held down during this keypress
+ */
+void Sandbox::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     Sandbox* sandbox = (Sandbox*)glfwGetWindowUserPointer(window); 
 
 	if (key == GLFW_KEY_R && action == GLFW_PRESS) {
