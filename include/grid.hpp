@@ -42,7 +42,7 @@ public:
     int slice_depth; // The current slice of the 3D texture that is being viewed
 
     // Brush variables
-    int brush_x, brush_y; // The x and y position of the brush stroke
+    int brush_x, brush_y, brush_z; // The x and y position of the brush stroke
     bool brush_enabled; // If true, the brush is enabled, if false, it is not
 
     // Compute and Vert+Frag Shaders
@@ -63,7 +63,7 @@ public:
     void clear_boundary_conditions();
     void load_data_to_texture();
     void resize();
-    void enable_brush(int x, int y);
+    void enable_brush(int x, int y, int z);
     void disable_brush();
 
 

@@ -32,8 +32,8 @@ Sandbox::Sandbox(int window_width, int window_height) {
     this->position = glm::vec3(0.0f, 0.0f, 0.0f);
     this->camera_position = glm::vec3(2.0f, 0.0f, 4.5f);
     this->pitch = 0.0f;
-    this->yaw = 90.0f;
-    this->radius = 1.0f;
+    this->yaw = 180.0f;
+    this->radius = 2.0f;
 }
 
 Sandbox::~Sandbox() {
@@ -233,9 +233,9 @@ void Sandbox::render_gui() {
 			mouse_pos.y >= image_min.y && mouse_pos.y < image_max.y) {
 			
 			int pixel_x = (int)((mouse_pos.x - image_min.x) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
-			int pixel_y = grid->grid_resolution - (int)((mouse_pos.y - image_min.y) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
+			int pixel_y = (int)((mouse_pos.y - image_min.y) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
 
-			grid->enable_brush(pixel_x, pixel_y);
+			grid->enable_brush(grid->slice_depth, grid->grid_resolution - pixel_y, pixel_x);
 		} else grid->disable_brush();
 	} else grid->disable_brush();
 
@@ -299,7 +299,9 @@ void Sandbox::render_gui() {
 void Sandbox::draw_boundary_mesh() {
 	if (boundary_mesh) {
 		boundary_shader->bind();
-		glm::mat4 model = glm::translate(glm::mat4(1.0f), boundary_offset);
+		glm::mat4 model = glm::mat4(1.0f);
+		model = glm::translate(model, boundary_offset);
+		// model = glm::rotate(model, 3.14159f, glm::vec3(0.0f, 1.0f, 0.0f));
 		model = glm::scale(model, glm::vec3(boundary_scale));
 		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
@@ -318,8 +320,8 @@ void Sandbox::draw_boundary_mesh() {
  */
 void Sandbox::draw_grid_boundary_mesh() {
 	boundary_shader->bind();
-	glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
-	model = glm::scale(model, glm::vec3(0.5f));
+	glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f));
+	model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
 	glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
 	boundary_shader->set_mat4x4("model", model);

@@ -29,7 +29,7 @@ Grid::Grid()
     this->threshold = 0.2f;
     this->wireframe = false;
 
-    this->slice_depth = 0;
+    this->slice_depth = grid_resolution / 2;
 
     this->data = std::vector<float>(4 * grid_resolution * grid_resolution * grid_resolution);
 
@@ -93,12 +93,10 @@ void Grid::gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, 
         vx_mesh_t* mesh = vx_mesh_alloc(shapes[s].mesh.num_face_vertices.size(), shapes[s].mesh.indices.size());
 
 		for (int v = 0; v < attrib.vertices.size() / 3; v++) {
-			glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(scale));
-			glm::vec4 vertex = model * glm::vec4(
+			glm::vec3 vertex = glm::vec3(
 				attrib.vertices[3 * size_t(v) + 0],
 				attrib.vertices[3 * size_t(v) + 1],
-				attrib.vertices[3 * size_t(v) + 2],
-				0.0f
+				attrib.vertices[3 * size_t(v) + 2]
 			);
 
 			mesh->vertices[v].x = vertex.x;
@@ -115,12 +113,12 @@ void Grid::gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, 
 	}
 
 	for (int i = 0; i < voxels->nvertices; i++) {
-		int x = ((int)((voxels->vertices[i].x + offset.x) * grid_resolution)) + (grid_resolution / 2);
-		int y = ((int)((voxels->vertices[i].y + offset.y) * grid_resolution)) + (grid_resolution / 2);
-		int z = ((int)((voxels->vertices[i].z + offset.z) * grid_resolution)) + (grid_resolution / 2);
+		int x = ((int)((scale * voxels->vertices[i].x + offset.x) * grid_resolution)) + (grid_resolution / 2);
+		int y = ((int)((scale * voxels->vertices[i].y + offset.y) * grid_resolution)) + (grid_resolution / 2);
+		int z = ((int)((scale * voxels->vertices[i].z + offset.z) * grid_resolution)) + (grid_resolution / 2);
 
 		if (x >= 0 && x < grid_resolution && y >= 0 && y < grid_resolution && z >= 0 && z < grid_resolution) {
-			int idx = z + y * grid_resolution + x * (grid_resolution * grid_resolution);
+			int idx = x + y * grid_resolution + z * (grid_resolution * grid_resolution);
 			data[4 * idx + 2] = 1.0;
 		}
 
@@ -177,10 +175,11 @@ void Grid::resize() {
  * @param x The x position of the brush stroke
  * @param y The y position of the brush stroke
  */
-void Grid::enable_brush(int x, int y) {
+void Grid::enable_brush(int x, int y, int z) {
 	brush_enabled = true;
 	brush_x = x;
 	brush_y = y;
+	brush_z = z;
 }
 
 /**
@@ -207,7 +206,7 @@ void Grid::set_shader_uniforms() {
 	integration_shader.set_bool("brush_enabled", brush_enabled);
 	integration_shader.set_int("brush_x", brush_x);
 	integration_shader.set_int("brush_y", brush_y);
-	integration_shader.set_int("brush_z", slice_depth);
+	integration_shader.set_int("brush_z", brush_z);
 
     // Marching Cubes Shader
 	marching_cubes_shader.bind();
