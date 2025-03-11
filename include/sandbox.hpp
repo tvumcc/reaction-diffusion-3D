@@ -1,8 +1,10 @@
 #pragma once
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
 #include "grid.hpp"
+#include "mesh.hpp"
 
 #include <vector>
 #include <string>
@@ -31,6 +33,14 @@ public:
     double fps; // The application's current framerate
     std::vector<float> fps_tracker; // Contains the framerates for the last 100 frames
 
+    // Boundary Conditions
+    std::unique_ptr<Mesh> grid_boundary_mesh;
+    std::unique_ptr<Mesh> boundary_mesh;
+    std::unique_ptr<Shader> boundary_shader;
+    glm::vec3 boundary_offset;
+    float boundary_scale;
+    std::string boundary_obj_path;
+
     Sandbox(int window_width, int window_height);
     ~Sandbox();
 
@@ -50,6 +60,11 @@ public:
     void init_gui(std::string font_path, int font_size);
     void render_gui();
     
+
+    // Boundary Condition Functions
+
+    void draw_boundary_mesh();
+    void draw_grid_boundary_mesh();
 
     // GLFW Callback Functions
 

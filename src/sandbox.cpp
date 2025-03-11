@@ -9,19 +9,23 @@
 #include <nfd.h>
 
 #include "sandbox.hpp"
-#include "mesh.hpp"
 
 #include <string>
 #include <iostream>
 
 #define UI_FONT_PATH "assets/NotoSans.ttf"
 #define UI_FONT_SIZE 20
-#define UI_SIDEBAR_WIDTH 300
+#define UI_SIDEBAR_WIDTH 350
 
 Sandbox::Sandbox(int window_width, int window_height) {
     initialize_window(window_width, window_height);
 	grid = std::make_unique<Grid>();
 	init_gui(UI_FONT_PATH, UI_FONT_SIZE);
+
+	grid_boundary_mesh = std::make_unique<Mesh>("assets/cube.obj");
+	boundary_shader = std::make_unique<Shader>("shaders/boundary.vert", "shaders/boundary.frag");
+	boundary_offset = glm::vec3(0.0f, 0.0f, 0.0f);
+	boundary_scale = 1.0f;
 
     this->mouse = true;
 
@@ -82,7 +86,6 @@ void Sandbox::initialize_window(int window_width, int window_height) {
  * Initiate the main loop of the application.
  */
 void Sandbox::run() {
-	Mesh mesh("assets/donut.obj");
 	while (!glfwWindowShouldClose(window)) {
 		calculate_framerate();
 		calculate_camera_position();
@@ -107,21 +110,18 @@ void Sandbox::run() {
 		grid->mesh_shader.set_mat4x4("view", view);
 		grid->mesh_shader.set_mat4x4("proj", proj);
 		grid->mesh_shader.set_vec3("cam_pos", camera_position);
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		glDepthMask(GL_TRUE);
 		grid->draw_mesh();
+		glDepthMask(GL_FALSE);
+		draw_boundary_mesh();
+		draw_grid_boundary_mesh();
+		glDepthMask(GL_TRUE);
 
-		model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
-		view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
-		proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
-		grid->mesh_shader.set_mat4x4("model", model);
-		grid->mesh_shader.set_mat4x4("view", view);
-		grid->mesh_shader.set_mat4x4("proj", proj);
-		grid->mesh_shader.set_vec3("cam_pos", camera_position);
-
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
-		glDisable(GL_CULL_FACE);
-		mesh.draw(grid->mesh_shader, GL_TRIANGLES);
-		glEnable(GL_CULL_FACE);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);	
+		glDisable(GL_BLEND);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -207,8 +207,10 @@ void Sandbox::render_gui() {
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
 
-	ImGui::Begin("Reaction Diffusion 3D", 0, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
-	if (!mouse) ImGui::BeginDisabled();
+	ImGui::Begin("Reaction Diffusion 3D", 0, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | (!mouse ? ImGuiWindowFlags_NoScrollWithMouse : 0));
+	if (!mouse) {
+		ImGui::BeginDisabled();
+	}
 	std::string fps_tracker_overlay = std::to_string((int)fps) + " FPS";
 	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
 	ImGui::PlotLines("##FPS Meter", fps_tracker.data(), fps_tracker.size(), 0, fps_tracker_overlay.c_str(), 0.0f, 100.0f, ImVec2(0.0f, 80.0f));
@@ -227,16 +229,12 @@ void Sandbox::render_gui() {
 		ImVec2 image_min = ImGui::GetItemRectMin();
 		ImVec2 image_max = ImGui::GetItemRectMax();
 
-		// Check if mouse is within the image bounds
 		if (mouse_pos.x >= image_min.x && mouse_pos.x < image_max.x &&
 			mouse_pos.y >= image_min.y && mouse_pos.y < image_max.y) {
 			
-			// Calculate pixel coordinates
 			int pixel_x = (int)((mouse_pos.x - image_min.x) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
-			int pixel_y = (int)((mouse_pos.y - image_min.y) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
+			int pixel_y = grid->grid_resolution - (int)((mouse_pos.y - image_min.y) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
 
-			// Output the pixel coordinates
-			std::cout << "Clicked at (" << pixel_x << ", " << pixel_y << ")\n";
 			grid->enable_brush(pixel_x, pixel_y);
 		} else grid->disable_brush();
 	} else grid->disable_brush();
@@ -262,22 +260,27 @@ void Sandbox::render_gui() {
 		nfdresult_t result = NFD_OpenDialog(NULL, NULL, &outPath);
 
 		if (outPath != NULL) {
-			grid->clear_boundary_conditions();
-			grid->gen_boundary_conditions(outPath);
-			grid->load_data_to_texture();
+			boundary_mesh = std::make_unique<Mesh>(outPath);
+			boundary_obj_path = outPath;
 		}
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Clear")) {
 		grid->clear_boundary_conditions();
+		boundary_mesh = nullptr;
+		boundary_obj_path = "";
 		grid->load_data_to_texture();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Central Dot")) {
-		std::vector<glm::vec3> dots = {glm::vec3(grid->grid_resolution / 2 + 25, grid->grid_resolution / 2, grid->grid_resolution / 2)};
-		grid->gen_initial_conditions(dots);
-		grid->load_data_to_texture();
+	if (ImGui::Button("Voxelize")) {
+		if (!boundary_obj_path.empty()) {
+			grid->clear_boundary_conditions();
+			grid->gen_boundary_conditions(boundary_obj_path, boundary_offset, boundary_scale);
+			grid->load_data_to_texture();	
+		}
 	}
+	ImGui::SliderFloat3("Mesh Offset", glm::value_ptr(boundary_offset), -1.0f, 1.0f);
+	ImGui::SliderFloat("Mesh Scale", &boundary_scale, 0.0f, 2.0f);
 
 	ImGui::SeparatorText("Mesh Generation");	
 	ImGui::SliderFloat("Threshold", &grid->threshold, 0.0f, 1.0f);
@@ -288,6 +291,44 @@ void Sandbox::render_gui() {
 	ImGui::PopStyleVar(3);
 	if (!mouse) ImGui::EndDisabled();
 	ImGui::End();
+}
+
+/**
+ * Render the boundary mesh into the world space.
+ */
+void Sandbox::draw_boundary_mesh() {
+	if (boundary_mesh) {
+		boundary_shader->bind();
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), boundary_offset);
+		model = glm::scale(model, glm::vec3(boundary_scale));
+		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
+		boundary_shader->set_mat4x4("model", model);
+		boundary_shader->set_mat4x4("view", view);
+		boundary_shader->set_mat4x4("proj", proj);
+		boundary_shader->set_vec3("object_color", glm::vec3(1.0f, 0.0f, 0.0f));
+		boundary_shader->set_float("transparency", 0.3f);
+
+		boundary_mesh->draw(*boundary_shader, GL_TRIANGLES);
+	}
+}
+
+/**
+ * Render the boundary cube that highlights the boundaries of the 3D grid.
+ */
+void Sandbox::draw_grid_boundary_mesh() {
+	boundary_shader->bind();
+	glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+	model = glm::scale(model, glm::vec3(0.5f));
+	glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
+	boundary_shader->set_mat4x4("model", model);
+	boundary_shader->set_mat4x4("view", view);
+	boundary_shader->set_mat4x4("proj", proj);
+	boundary_shader->set_vec3("object_color", glm::vec3(0.0f, 0.0f, 1.0f));
+	boundary_shader->set_float("transparency", 0.1f);
+
+	grid_boundary_mesh->draw(*boundary_shader, GL_TRIANGLES);
 }
 
 /**
@@ -353,7 +394,7 @@ void Sandbox::cursor_pos_callback(GLFWwindow* window, double x, double y) {
 void Sandbox::scroll_callback(GLFWwindow* window, double dx, double dy) {
     Sandbox* sandbox = (Sandbox*)glfwGetWindowUserPointer(window); 
 
-	if (sandbox->radius + 0.1 * dy > 0.0f) sandbox->radius += 0.1 * dy;
+	if (sandbox->radius + 0.1 * dy > 0.0f && !sandbox->mouse) sandbox->radius += 0.1 * dy;
 }
 
 /**

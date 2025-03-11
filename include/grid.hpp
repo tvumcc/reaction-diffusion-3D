@@ -59,7 +59,7 @@ public:
     // Texture and Data Modification Functions
 
     void gen_initial_conditions(std::vector<glm::vec3> dots);
-    void gen_boundary_conditions(std::string obj_file_path);
+    void gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, float scale);
     void clear_boundary_conditions();
     void load_data_to_texture();
     void resize();

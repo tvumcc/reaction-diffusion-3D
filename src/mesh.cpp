@@ -71,7 +71,6 @@ Mesh::Mesh(std::string path) {
         }
     }
 
-    std::cout << vertices.size() << "\n";
     init_data();
 }
 

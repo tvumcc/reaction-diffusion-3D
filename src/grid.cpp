@@ -1,4 +1,5 @@
 #include <glad/glad.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <tiny_obj_loader.h>
 #define VOXELIZER_IMPLEMENTATION
 #include <voxelizer/voxelizer.h>
@@ -70,7 +71,7 @@ void Grid::gen_initial_conditions(std::vector<glm::vec3> dots) {
  * 
  * @param obj_file_path The .obj file containing the 3D model to voxelize and set as boundary condition
  */
-void Grid::gen_boundary_conditions(std::string obj_file_path) {
+void Grid::gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, float scale) {
     tinyobj::ObjReader reader;
     tinyobj::ObjReaderConfig reader_config;
 
@@ -92,9 +93,17 @@ void Grid::gen_boundary_conditions(std::string obj_file_path) {
         vx_mesh_t* mesh = vx_mesh_alloc(shapes[s].mesh.num_face_vertices.size(), shapes[s].mesh.indices.size());
 
 		for (int v = 0; v < attrib.vertices.size() / 3; v++) {
-			mesh->vertices[v].x = attrib.vertices[3 * size_t(v) + 0];
-			mesh->vertices[v].y = attrib.vertices[3 * size_t(v) + 1];
-			mesh->vertices[v].z = attrib.vertices[3 * size_t(v) + 2];
+			glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(scale));
+			glm::vec4 vertex = model * glm::vec4(
+				attrib.vertices[3 * size_t(v) + 0],
+				attrib.vertices[3 * size_t(v) + 1],
+				attrib.vertices[3 * size_t(v) + 2],
+				0.0f
+			);
+
+			mesh->vertices[v].x = vertex.x;
+			mesh->vertices[v].y = vertex.y;
+			mesh->vertices[v].z = vertex.z;
 		}
 
         for (size_t f = 0; f < shapes[s].mesh.indices.size(); f++) {
@@ -105,35 +114,10 @@ void Grid::gen_boundary_conditions(std::string obj_file_path) {
 		break;
 	}
 
-	std::cout << "Num of vertices: " << voxels->nvertices << "\n";
-	int min_x = 100000;
-	int max_x = -100000;
-	int min_y = 100000;
-	int max_y = -100000;
-	int min_z = 100000;
-	int max_z = -100000;
 	for (int i = 0; i < voxels->nvertices; i++) {
-		int x = (int)(voxels->vertices[i].x * grid_resolution);
-		int y = (int)(voxels->vertices[i].y * grid_resolution);
-		int z = (int)(voxels->vertices[i].z * grid_resolution);
-
-		min_x = std::min(min_x, x);
-		max_x = std::max(max_x, x);
-		min_y = std::min(min_y, y);
-		max_y = std::max(max_y, y);
-		min_z = std::min(min_z, z);
-		max_z = std::max(max_z, z);
-
-	}
-
-	std::cout << "X: [" << min_x << ", " << max_x << "]\n";
-	std::cout << "Y: [" << min_y << ", " << max_y << "]\n";
-	std::cout << "Z: [" << min_z << ", " << max_z << "]\n";
-
-	for (int i = 0; i < voxels->nvertices; i++) {
-		int x = ((int)(voxels->vertices[i].x * grid_resolution)) + (grid_resolution / 2);
-		int y = ((int)(voxels->vertices[i].y * grid_resolution)) + (grid_resolution / 2);
-		int z = ((int)(voxels->vertices[i].z * grid_resolution)) + (grid_resolution / 2);
+		int x = ((int)((voxels->vertices[i].x + offset.x) * grid_resolution)) + (grid_resolution / 2);
+		int y = ((int)((voxels->vertices[i].y + offset.y) * grid_resolution)) + (grid_resolution / 2);
+		int z = ((int)((voxels->vertices[i].z + offset.z) * grid_resolution)) + (grid_resolution / 2);
 
 		if (x >= 0 && x < grid_resolution && y >= 0 && y < grid_resolution && z >= 0 && z < grid_resolution) {
 			int idx = z + y * grid_resolution + x * (grid_resolution * grid_resolution);
@@ -141,20 +125,6 @@ void Grid::gen_boundary_conditions(std::string obj_file_path) {
 		}
 
 	}
-
-	// for (int i = 0; i < voxels->nvertices; i++) {
-	// 	std::cout << "(" << voxels->vertices[i].x << ", " << voxels->vertices[i].y << ", " << voxels->vertices[i].z << ")\n";
-	// }
-
-
-	// for (int i = 0; i < grid_resolution; i++) {
-	// 	for (int j = 0; j < grid_resolution; j++) {
-	// 		for (int k = 0; k < grid_resolution; k++) {
-	// 			size_t idx = i + j * grid_resolution + k * (grid_resolution * grid_resolution);
-	// 			data[4 * idx + 2] = voxels[idx] != 0 ? 1.0f : 0.0f; // Reset only the boundary condition component of the 3D grid
-	// 		}
-	// 	}
-	// }
 }
 
 /**
@@ -319,8 +289,7 @@ void Grid::init_grid_texture() {
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-	std::vector<glm::vec3> dots = {glm::vec3(grid_resolution / 2.0, grid_resolution / 2.0, grid_resolution / 2.0)};
-    gen_initial_conditions(dots);
+    gen_initial_conditions(std::vector<glm::vec3>());
     load_data_to_texture();
 }
 

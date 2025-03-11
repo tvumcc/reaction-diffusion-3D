@@ -20,7 +20,7 @@ vec3 viridis(float t) {
 }
 
 void main() {
-    vec4 brightness = texture(grid_tex, vec3(uv.x, uv.y, float(slice_depth) / float(grid_resolution)));
+    vec4 brightness = texture(grid_tex, vec3(uv.x, 1.0 - uv.y, float(slice_depth) / float(grid_resolution)));
     vec3 color = viridis(2.0 * brightness.g);
     if (brightness.b >= 1.0) {
         color = vec3(1.0);
