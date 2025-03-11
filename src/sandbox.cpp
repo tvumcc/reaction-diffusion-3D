@@ -99,17 +99,29 @@ void Sandbox::run() {
 
 		grid->draw_slice();
 		glViewport(0, 0, window_width - ui_sidebar_width, window_height);
-		grid->draw_mesh();
-
 		grid->mesh_shader.bind();
-		glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.5, 0.5, 0.5));
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, -0.5f, -0.5f));
 		glm::mat4 view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
 		grid->mesh_shader.set_mat4x4("model", model);
 		grid->mesh_shader.set_mat4x4("view", view);
 		grid->mesh_shader.set_mat4x4("proj", proj);
 		grid->mesh_shader.set_vec3("cam_pos", camera_position);
+		grid->draw_mesh();
+
+		model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+		view = glm::lookAt(camera_position, position, glm::vec3(0.0f, 1.0f, 0.0f));
+		proj = glm::perspective(45.0f, (float)(window_width - ui_sidebar_width) / (float)window_height, 0.01f, 100.0f);
+		grid->mesh_shader.set_mat4x4("model", model);
+		grid->mesh_shader.set_mat4x4("view", view);
+		grid->mesh_shader.set_mat4x4("proj", proj);
+		grid->mesh_shader.set_vec3("cam_pos", camera_position);
+
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);	
+		glDisable(GL_CULL_FACE);
 		mesh.draw(grid->mesh_shader, GL_TRIANGLES);
+		glEnable(GL_CULL_FACE);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);	
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -185,7 +197,6 @@ void Sandbox::render_gui() {
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	// ImGui Stuff Goes Here
 	const ImGuiViewport *main_viewport = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(ImVec2(main_viewport->WorkPos.x + main_viewport->WorkSize.x - ui_sidebar_width, main_viewport->WorkPos.y));
 	ImGui::SetNextWindowSize(ImVec2(ui_sidebar_width, main_viewport->WorkSize.y));
@@ -195,16 +206,40 @@ void Sandbox::render_gui() {
 	ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 8.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
+
 	ImGui::Begin("Reaction Diffusion 3D", 0, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 	if (!mouse) ImGui::BeginDisabled();
 	std::string fps_tracker_overlay = std::to_string((int)fps) + " FPS";
 	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
 	ImGui::PlotLines("##FPS Meter", fps_tracker.data(), fps_tracker.size(), 0, fps_tracker_overlay.c_str(), 0.0f, 100.0f, ImVec2(0.0f, 80.0f));
 	ImGui::PopItemWidth();
+
 	ImGui::SeparatorText("Keyboard Controls");
 	ImGui::Text("R - Toggle Mouse Camera Rotation");
 	ImGui::Text("Q - (Un)pause Simulation");
 	ImGui::Text("Esc - Close Program");
+
+	ImGui::SeparatorText("Slice Viewer");
+	if (ImGui::SliderInt("Slice", &grid->slice_depth, 0, grid->grid_resolution-1)) grid->slice_depth = std::min(grid->slice_depth, (int)grid->grid_resolution-1);
+	ImGui::Image((ImTextureID)grid->slice_texture, ImVec2(ui_sidebar_width - 20, ui_sidebar_width - 20));
+	if (ImGui::IsItemHovered() && (ImGui::IsMouseDragging(0) || ImGui::IsMouseClicked(0))) {
+		ImVec2 mouse_pos = ImGui::GetMousePos();
+		ImVec2 image_min = ImGui::GetItemRectMin();
+		ImVec2 image_max = ImGui::GetItemRectMax();
+
+		// Check if mouse is within the image bounds
+		if (mouse_pos.x >= image_min.x && mouse_pos.x < image_max.x &&
+			mouse_pos.y >= image_min.y && mouse_pos.y < image_max.y) {
+			
+			// Calculate pixel coordinates
+			int pixel_x = (int)((mouse_pos.x - image_min.x) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
+			int pixel_y = (int)((mouse_pos.y - image_min.y) / (float)(ui_sidebar_width - 20) * grid->grid_resolution);
+
+			// Output the pixel coordinates
+			std::cout << "Clicked at (" << pixel_x << ", " << pixel_y << ")\n";
+			grid->enable_brush(pixel_x, pixel_y);
+		} else grid->disable_brush();
+	} else grid->disable_brush();
 
 	ImGui::SeparatorText("Simulation");
 	ImGui::Checkbox("Paused", &grid->paused);
@@ -220,13 +255,6 @@ void Sandbox::render_gui() {
 		grid->resize();
 	}
 	ImGui::SliderInt("Steps/Frame", &grid->integration_dispatches_per_frame, 1, 50);
-
-	ImGui::SeparatorText("Initial Conditions");
-	if (ImGui::Button("Central Dot")) {
-		std::vector<glm::vec3> dots = {glm::vec3(grid->grid_resolution / 2 + 25, grid->grid_resolution / 2, grid->grid_resolution / 2)};
-		grid->gen_initial_conditions(dots);
-		grid->load_data_to_texture();
-	}
 
 	ImGui::SeparatorText("Boundary Conditions");
 	if (ImGui::Button("Import .obj")) {
@@ -244,11 +272,14 @@ void Sandbox::render_gui() {
 		grid->clear_boundary_conditions();
 		grid->load_data_to_texture();
 	}
+	ImGui::SameLine();
+	if (ImGui::Button("Central Dot")) {
+		std::vector<glm::vec3> dots = {glm::vec3(grid->grid_resolution / 2 + 25, grid->grid_resolution / 2, grid->grid_resolution / 2)};
+		grid->gen_initial_conditions(dots);
+		grid->load_data_to_texture();
+	}
 
 	ImGui::SeparatorText("Mesh Generation");	
-	if (ImGui::SliderInt("Slice", &grid->slice_depth, 0, grid->grid_resolution-1)) grid->slice_depth = std::min(grid->slice_depth, (int)grid->grid_resolution-1);
-	ImGui::Image((ImTextureID)grid->slice_texture, ImVec2(ui_sidebar_width - 20, ui_sidebar_width - 20));
-
 	ImGui::SliderFloat("Threshold", &grid->threshold, 0.0f, 1.0f);
 	ImGui::SliderInt("Resolution ##Mesh", &grid->mesh_resolution, 10, grid->grid_resolution);
 	ImGui::Checkbox("Wireframe", &grid->wireframe);

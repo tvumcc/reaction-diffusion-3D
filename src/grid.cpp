@@ -86,7 +86,7 @@ void Grid::gen_boundary_conditions(std::string obj_file_path) {
     auto& shapes = reader.GetShapes();
 	float res = 1.0 / grid_resolution;
 	float precision = 0.01;
-	unsigned int* voxels;
+	vx_point_cloud_t* voxels;
 
     for (int s = 0; s < shapes.size(); s++) { // Loop through shapes
         vx_mesh_t* mesh = vx_mesh_alloc(shapes[s].mesh.num_face_vertices.size(), shapes[s].mesh.indices.size());
@@ -101,18 +101,60 @@ void Grid::gen_boundary_conditions(std::string obj_file_path) {
             mesh->indices[f] = shapes[s].mesh.indices[f].vertex_index;
         }
 
-		voxels = vx_voxelize_snap_3dgrid(mesh, grid_resolution, grid_resolution, grid_resolution);
+		voxels = vx_voxelize_pc(mesh, 1.0 / grid_resolution, 1.0 / grid_resolution, 1.0 / grid_resolution, 1.0 / grid_resolution / 10.0);
 		break;
 	}
 
-	for (int i = 0; i < grid_resolution; i++) {
-		for (int j = 0; j < grid_resolution; j++) {
-			for (int k = 0; k < grid_resolution; k++) {
-				size_t idx = i + j * grid_resolution + k * (grid_resolution * grid_resolution);
-				data[4 * idx + 2] = voxels[idx] != 0 ? 1.0f : 0.0f; // Reset only the boundary condition component of the 3D grid
-			}
-		}
+	std::cout << "Num of vertices: " << voxels->nvertices << "\n";
+	int min_x = 100000;
+	int max_x = -100000;
+	int min_y = 100000;
+	int max_y = -100000;
+	int min_z = 100000;
+	int max_z = -100000;
+	for (int i = 0; i < voxels->nvertices; i++) {
+		int x = (int)(voxels->vertices[i].x * grid_resolution);
+		int y = (int)(voxels->vertices[i].y * grid_resolution);
+		int z = (int)(voxels->vertices[i].z * grid_resolution);
+
+		min_x = std::min(min_x, x);
+		max_x = std::max(max_x, x);
+		min_y = std::min(min_y, y);
+		max_y = std::max(max_y, y);
+		min_z = std::min(min_z, z);
+		max_z = std::max(max_z, z);
+
 	}
+
+	std::cout << "X: [" << min_x << ", " << max_x << "]\n";
+	std::cout << "Y: [" << min_y << ", " << max_y << "]\n";
+	std::cout << "Z: [" << min_z << ", " << max_z << "]\n";
+
+	for (int i = 0; i < voxels->nvertices; i++) {
+		int x = ((int)(voxels->vertices[i].x * grid_resolution)) + (grid_resolution / 2);
+		int y = ((int)(voxels->vertices[i].y * grid_resolution)) + (grid_resolution / 2);
+		int z = ((int)(voxels->vertices[i].z * grid_resolution)) + (grid_resolution / 2);
+
+		if (x >= 0 && x < grid_resolution && y >= 0 && y < grid_resolution && z >= 0 && z < grid_resolution) {
+			int idx = z + y * grid_resolution + x * (grid_resolution * grid_resolution);
+			data[4 * idx + 2] = 1.0;
+		}
+
+	}
+
+	// for (int i = 0; i < voxels->nvertices; i++) {
+	// 	std::cout << "(" << voxels->vertices[i].x << ", " << voxels->vertices[i].y << ", " << voxels->vertices[i].z << ")\n";
+	// }
+
+
+	// for (int i = 0; i < grid_resolution; i++) {
+	// 	for (int j = 0; j < grid_resolution; j++) {
+	// 		for (int k = 0; k < grid_resolution; k++) {
+	// 			size_t idx = i + j * grid_resolution + k * (grid_resolution * grid_resolution);
+	// 			data[4 * idx + 2] = voxels[idx] != 0 ? 1.0f : 0.0f; // Reset only the boundary condition component of the 3D grid
+	// 		}
+	// 	}
+	// }
 }
 
 /**
@@ -160,6 +202,25 @@ void Grid::resize() {
 }
 
 /**
+ * Enables the brush so that initial value spheres can be added to the 3D grid texture on the GPU.
+ * 
+ * @param x The x position of the brush stroke
+ * @param y The y position of the brush stroke
+ */
+void Grid::enable_brush(int x, int y) {
+	brush_enabled = true;
+	brush_x = x;
+	brush_y = y;
+}
+
+/**
+ * Disables the brush
+ */
+void Grid::disable_brush() {
+	brush_enabled = false;
+}
+
+/**
  * Set uniforms for the integration shader, Marching Cubes shader, and slice shader.
  */
 void Grid::set_shader_uniforms() {
@@ -173,6 +234,10 @@ void Grid::set_shader_uniforms() {
 	integration_shader.set_float("time_step", time_step);
 	integration_shader.set_float("space_step", space_step);
 	integration_shader.set_bool("paused", paused);
+	integration_shader.set_bool("brush_enabled", brush_enabled);
+	integration_shader.set_int("brush_x", brush_x);
+	integration_shader.set_int("brush_y", brush_y);
+	integration_shader.set_int("brush_z", slice_depth);
 
     // Marching Cubes Shader
 	marching_cubes_shader.bind();

@@ -10,6 +10,11 @@ uniform float k;
 uniform float Du;
 uniform float Dv;
 
+uniform bool brush_enabled;
+uniform int brush_x;
+uniform int brush_y;
+uniform int brush_z;
+
 uniform bool paused;
 
 void main() {
@@ -50,5 +55,9 @@ void main() {
     float uf = u + dUdt * time_step;
     float vf = v + dVdt * time_step;
 
-    imageStore(grid, location, vec4(uf, vf, boundary_condition, 0.0));
+    if (brush_enabled && (length(vec3(x - brush_x, y - brush_y, z - brush_z)) <= 1)) {
+        imageStore(grid, location, vec4(1.0, 1.0, boundary_condition, 0.0));
+    } else {
+        imageStore(grid, location, vec4(uf, vf, boundary_condition, 0.0));
+    }
 }

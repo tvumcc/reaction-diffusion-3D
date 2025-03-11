@@ -41,6 +41,10 @@ public:
     GLuint slice_fbo, slice_vbo, slice_vao;
     int slice_depth; // The current slice of the 3D texture that is being viewed
 
+    // Brush variables
+    int brush_x, brush_y; // The x and y position of the brush stroke
+    bool brush_enabled; // If true, the brush is enabled, if false, it is not
+
     // Compute and Vert+Frag Shaders
     ComputeShader integration_shader; // Numerically integrates the Gray-Scott PDEs
     ComputeShader marching_cubes_shader; // Creates a triangular mesh from the Gray-Scott solution grid
@@ -59,6 +63,8 @@ public:
     void clear_boundary_conditions();
     void load_data_to_texture();
     void resize();
+    void enable_brush(int x, int y);
+    void disable_brush();
 
 
     // Per frame Utility Functions
