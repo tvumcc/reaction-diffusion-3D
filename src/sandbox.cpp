@@ -220,6 +220,9 @@ void Sandbox::render_gui() {
 	ImGui::Text("R - Toggle Mouse Camera Rotation");
 	ImGui::Text("Q - (Un)pause Simulation");
 	ImGui::Text("Esc - Close Program");
+	if (ImGui::Button("Export .obj")) {
+		grid->export_mesh_to_obj();
+	}
 
 	ImGui::SeparatorText("Slice Viewer");
 	if (ImGui::SliderInt("Slice", &grid->slice_depth, 0, grid->grid_resolution-1)) grid->slice_depth = std::min(grid->slice_depth, (int)grid->grid_resolution-1);

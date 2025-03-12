@@ -61,6 +61,7 @@ public:
     void gen_initial_conditions(std::vector<glm::vec3> dots);
     void gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, float scale);
     void clear_boundary_conditions();
+    void export_mesh_to_obj();
     void load_data_to_texture();
     void resize();
     void enable_brush(int x, int y, int z);

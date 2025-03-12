@@ -1,5 +1,8 @@
 #include <glad/glad.h>
+#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 #include <tiny_obj_loader.h>
 #define VOXELIZER_IMPLEMENTATION
 #include <voxelizer/voxelizer.h>
@@ -8,6 +11,9 @@
 #include "marching_cubes.hpp"
 
 #include <iostream>
+#include <algorithm>
+#include <fstream>
+#include <unordered_map>
 
 Grid::Grid() 
     : integration_shader("shaders/reaction_diffusion.glsl"),
@@ -137,6 +143,82 @@ void Grid::clear_boundary_conditions() {
 			}
 		}
 	}	
+}
+
+/**
+ * Export the current state of the mesh to a triangulated .obj file
+ */
+void Grid::export_mesh_to_obj() {
+	// Read in mesh data from the vertex array
+	glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
+	size_t sz = 15 * (grid_resolution / 2) * (grid_resolution / 2) * (grid_resolution / 2);
+	MarchingCubeVertex* ptr = new MarchingCubeVertex[sz];
+	glGetBufferSubData(GL_ARRAY_BUFFER, 0, sz * sizeof(MarchingCubeVertex), ptr);
+	
+    std::ofstream objFile("out.obj");
+    if (!objFile.is_open()) {
+        std::cerr << "Error opening file" << std::endl;
+        delete[] ptr;
+        return;
+    }
+
+	std::vector<glm::vec3> distinctPositions;
+	std::vector<glm::vec3> distinctNormals;
+	std::vector<int> faceIndices;
+
+	std::unordered_map<glm::vec3, int, std::hash<glm::vec3>> positionMap;
+    std::unordered_map<glm::vec3, int, std::hash<glm::vec3>> normalMap;
+
+    for (size_t i = 0; i < sz; i++) {
+        // Extract position and normal using GLM
+        glm::vec3 pos = ptr[i].pos - glm::vec3(0.5f, 0.5f, 0.5f);
+        glm::vec3 norm = ptr[i].normal;
+
+        // Check if position is already in the distinctPositions
+        if (positionMap.count(pos) == 0) {
+            positionMap[pos] = distinctPositions.size(); // Index of the new position
+            distinctPositions.push_back(pos);
+        }
+
+        // Check if normal is already in the distinctNormals
+        if (normalMap.count(norm) == 0) {
+            normalMap[norm] = distinctNormals.size(); // Index of the new normal
+            distinctNormals.push_back(norm);
+        }
+
+        // Add face indices based on the position and normal indices
+        faceIndices.push_back(positionMap[pos]);
+        faceIndices.push_back(normalMap[norm]);
+    }
+
+	for (int i = 0; i < distinctPositions.size(); i++) {
+		objFile << "v " << distinctPositions[i].x << " " << distinctPositions[i].y << " " << distinctPositions[i].z << "\n";
+	}
+
+	for (int i = 0; i < distinctNormals.size(); i++) {
+		objFile << "vn " << distinctNormals[i].x << " " << distinctNormals[i].y << " " << distinctNormals[i].z << "\n";
+	}
+
+	for (int i = 0; i < faceIndices.size(); i += 6) {
+		glm::vec3 A = distinctPositions[faceIndices[i]];
+		glm::vec3 B = distinctPositions[faceIndices[i+2]];
+		glm::vec3 C = distinctPositions[faceIndices[i+4]];
+		float a = glm::length(B - C);
+		float b = glm::length(A - C);
+		float c = glm::length(A - B);
+		float s = 0.5 * (a + b + c);
+		float area = sqrt(s * (s - a) * (s - b) * (s - c));
+		if (area <= 0) continue;
+
+		objFile << "f " << faceIndices[i]+1 << "//" << faceIndices[i+1]+1 << " "; 
+		objFile << faceIndices[i+2]+1 << "//" << faceIndices[i+3]+1 << " "; 
+		objFile << faceIndices[i+4]+1 << "//" << faceIndices[i+5]+1 << "\n"; 
+	}
+
+    objFile.close();
+    std::cout << "Exported successfully!" << std::endl;
+
+    delete[] ptr;
 }
 
 /**
