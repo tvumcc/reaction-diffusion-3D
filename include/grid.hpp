@@ -34,7 +34,6 @@ public:
     int grid_resolution; // Resolution of the 3D grid texture
     int mesh_resolution; // Resolution of the triangular mesh
     float threshold; // The isovalue at which the mesh is rendered
-    bool wireframe; // If false, the mesh is rendered as wireframe triangles, if true, the triangles are filled instead
 
     // Cross Section OpenGL objects and settings
     GLuint slice_texture;
@@ -59,7 +58,7 @@ public:
     // Texture and Data Modification Functions
 
     void gen_initial_conditions(std::vector<glm::vec3> dots);
-    void gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, float scale);
+    void voxelize_boundary_conditions(std::string obj_file_path, glm::vec3 offset, float scale);
     void clear_boundary_conditions();
     void export_mesh_to_obj();
     void load_data_to_texture();

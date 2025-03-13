@@ -80,6 +80,7 @@ void Sandbox::initialize_window(int window_width, int window_height) {
 	glEnable(GL_PROGRAM_POINT_SIZE);
 	glEnable(GL_CULL_FACE);
 	last_frame = glfwGetTime();
+	glfwMaximizeWindow(window);
 }
 
 /**
@@ -118,7 +119,7 @@ void Sandbox::run() {
 		grid->draw_mesh();
 		glDepthMask(GL_FALSE);
 		draw_boundary_mesh();
-		draw_grid_boundary_mesh();
+		draw_grid_cube_mesh();
 		glDepthMask(GL_TRUE);
 
 		glDisable(GL_BLEND);
@@ -208,20 +209,27 @@ void Sandbox::render_gui() {
 
 
 	ImGui::Begin("Reaction Diffusion 3D", 0, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | (!mouse ? ImGuiWindowFlags_NoScrollWithMouse : 0));
-	if (!mouse) {
-		ImGui::BeginDisabled();
-	}
+	if (!mouse) ImGui::BeginDisabled();
+
 	std::string fps_tracker_overlay = std::to_string((int)fps) + " FPS";
 	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
 	ImGui::PlotLines("##FPS Meter", fps_tracker.data(), fps_tracker.size(), 0, fps_tracker_overlay.c_str(), 0.0f, 100.0f, ImVec2(0.0f, 80.0f));
 	ImGui::PopItemWidth();
 
-	ImGui::SeparatorText("Keyboard Controls");
-	ImGui::Text("R - Toggle Mouse Camera Rotation");
-	ImGui::Text("Q - (Un)pause Simulation");
-	ImGui::Text("Esc - Close Program");
-	if (ImGui::Button("Export .obj")) {
-		grid->export_mesh_to_obj();
+	if (ImGui::CollapsingHeader("Help")) {
+		ImGui::SeparatorText("Keyboard Controls");
+		ImGui::Text("Q - (Un)pause Simulation");
+		ImGui::Text("E - Toggle Mouse Camera Rotation");
+		ImGui::Text("R - Reset Mesh");
+		ImGui::Text("Esc - Close Program");
+
+		ImGui::SeparatorText("How To Use");
+		ImGui::TextWrapped("Try drawing a pattern in the slice viewer by clicking and dragging. Next, unpause the simulation and watch the initial conditions propagate into an interesting looking mesh.");
+	}
+	
+	if (ImGui::CollapsingHeader("Visibility")) {
+		ImGui::SliderFloat("Grid Cube Opacity", &grid_cube_opacity, 0.0f, 1.0f);
+		ImGui::SliderFloat("Boundary Mesh Opacity", &boundary_mesh_opacity, 0.0f, 1.0f);
 	}
 
 	ImGui::SeparatorText("Slice Viewer");
@@ -242,23 +250,21 @@ void Sandbox::render_gui() {
 		} else grid->disable_brush();
 	} else grid->disable_brush();
 
+
 	ImGui::SeparatorText("Simulation");
 	ImGui::Checkbox("Paused", &grid->paused);
 	ImGui::SameLine();
-	if (ImGui::Button("Reset") || glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+	if (ImGui::Button("Reset") || glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 		glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, grid->grid_resolution, grid->grid_resolution, grid->grid_resolution, 0, GL_RGBA, GL_FLOAT, grid->data.data());
 		glBindImageTexture(0, grid->grid_texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
 	}
 	ImGui::SliderFloat("Feed Rate", &grid->feed_rate, 0.0f, 0.1f);
 	ImGui::SliderFloat("Kill Rate", &grid->kill_rate, 0.0f, 0.1f);
-	if (ImGui::SliderInt("Resolution ##Grid", &grid->grid_resolution, 10, 128)) {
-		grid->mesh_resolution = std::min(grid->mesh_resolution, grid->grid_resolution);
-		grid->resize();
-	}
+	if (ImGui::SliderInt("Resolution ##Grid", &grid->grid_resolution, 10, 128)) grid->resize();
 	ImGui::SliderInt("Steps/Frame", &grid->integration_dispatches_per_frame, 1, 50);
 
 	ImGui::SeparatorText("Boundary Conditions");
-	if (ImGui::Button("Import .obj")) {
+	if (ImGui::Button("Import")) {
 		nfdchar_t *outPath = NULL;		
 		nfdresult_t result = NFD_OpenDialog(NULL, NULL, &outPath);
 
@@ -269,26 +275,24 @@ void Sandbox::render_gui() {
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Clear")) {
-		grid->clear_boundary_conditions();
 		boundary_mesh = nullptr;
 		boundary_obj_path = "";
-		grid->load_data_to_texture();
+		grid->clear_boundary_conditions();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Voxelize")) {
-		if (!boundary_obj_path.empty()) {
-			grid->clear_boundary_conditions();
-			grid->gen_boundary_conditions(boundary_obj_path, boundary_offset, boundary_scale);
-			grid->load_data_to_texture();	
-		}
+	if (ImGui::Button("Voxelize")) grid->voxelize_boundary_conditions(boundary_obj_path, boundary_offset, boundary_scale);
+	ImGui::SameLine();
+	if (ImGui::Button("Reset Transforms")) {
+		boundary_offset = glm::vec3(0.0f, 0.0f, 0.0f);
+		boundary_scale = 1.0f;
 	}
 	ImGui::SliderFloat3("Mesh Offset", glm::value_ptr(boundary_offset), -1.0f, 1.0f);
 	ImGui::SliderFloat("Mesh Scale", &boundary_scale, 0.0f, 2.0f);
 
 	ImGui::SeparatorText("Mesh Generation");	
+	if (ImGui::Button("Export Mesh as .obj")) grid->export_mesh_to_obj();
 	ImGui::SliderFloat("Threshold", &grid->threshold, 0.0f, 1.0f);
-	ImGui::SliderInt("Resolution ##Mesh", &grid->mesh_resolution, 10, grid->grid_resolution);
-	ImGui::Checkbox("Wireframe", &grid->wireframe);
+
 
 	ImGui::PopStyleColor(2);
 	ImGui::PopStyleVar(3);
@@ -312,7 +316,7 @@ void Sandbox::draw_boundary_mesh() {
 		boundary_shader->set_mat4x4("view", view);
 		boundary_shader->set_mat4x4("proj", proj);
 		boundary_shader->set_vec3("object_color", glm::vec3(1.0f, 0.0f, 0.0f));
-		boundary_shader->set_float("transparency", 0.3f);
+		boundary_shader->set_float("transparency", boundary_mesh_opacity);
 
 		boundary_mesh->draw(*boundary_shader, GL_TRIANGLES);
 	}
@@ -321,7 +325,7 @@ void Sandbox::draw_boundary_mesh() {
 /**
  * Render the boundary cube that highlights the boundaries of the 3D grid.
  */
-void Sandbox::draw_grid_boundary_mesh() {
+void Sandbox::draw_grid_cube_mesh() {
 	boundary_shader->bind();
 	glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f));
 	model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
@@ -331,7 +335,7 @@ void Sandbox::draw_grid_boundary_mesh() {
 	boundary_shader->set_mat4x4("view", view);
 	boundary_shader->set_mat4x4("proj", proj);
 	boundary_shader->set_vec3("object_color", glm::vec3(0.0f, 0.0f, 1.0f));
-	boundary_shader->set_float("transparency", 0.1f);
+	boundary_shader->set_float("transparency", grid_cube_opacity);
 
 	grid_boundary_mesh->draw(*boundary_shader, GL_TRIANGLES);
 }
@@ -414,7 +418,7 @@ void Sandbox::scroll_callback(GLFWwindow* window, double dx, double dy) {
 void Sandbox::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     Sandbox* sandbox = (Sandbox*)glfwGetWindowUserPointer(window); 
 
-	if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+	if (key == GLFW_KEY_E && action == GLFW_PRESS) {
 		sandbox->mouse = !sandbox->mouse;
 		glfwSetInputMode(window, GLFW_CURSOR, sandbox->mouse ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
 	}

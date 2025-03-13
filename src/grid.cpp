@@ -6,6 +6,7 @@
 #include <tiny_obj_loader.h>
 #define VOXELIZER_IMPLEMENTATION
 #include <voxelizer/voxelizer.h>
+#include <nfd.h>
 
 #include "grid.hpp"
 #include "marching_cubes.hpp"
@@ -33,7 +34,6 @@ Grid::Grid()
     this->grid_resolution = 64;
     this->mesh_resolution = 64;
     this->threshold = 0.2f;
-    this->wireframe = false;
 
     this->slice_depth = grid_resolution / 2;
 
@@ -72,12 +72,17 @@ void Grid::gen_initial_conditions(std::vector<glm::vec3> dots) {
 }
 
 /**
- * Generate boundary conditions in the 3D data array by voxelizing the given
- * 3D model from the .obj file.
+ * Generate a voxel boundary using the user imported .obj file as well as taking into
+ * account scaling and offsets for the correct positioning in the 3D grid.
  * 
  * @param obj_file_path The .obj file containing the 3D model to voxelize and set as boundary condition
+ * @param offset The translational offset to apply to the original imported mesh's local coordinate space
+ * @param scale The size scaling to apply to the originnal import mesh's local coordinate space
  */
-void Grid::gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, float scale) {
+void Grid::voxelize_boundary_conditions(std::string obj_file_path, glm::vec3 offset, float scale) {
+	if (obj_file_path.empty()) return;
+	clear_boundary_conditions();
+
     tinyobj::ObjReader reader;
     tinyobj::ObjReaderConfig reader_config;
 
@@ -127,14 +132,16 @@ void Grid::gen_boundary_conditions(std::string obj_file_path, glm::vec3 offset, 
 			int idx = x + y * grid_resolution + z * (grid_resolution * grid_resolution);
 			data[4 * idx + 2] = 1.0;
 		}
-
 	}
+
+	load_data_to_texture();	
 }
 
 /**
- * Reset the boundary conditions to the edges of the 3D data array.
+ * Reset all user defined boundary conditions in the 3D grid.
  */
 void Grid::clear_boundary_conditions() {
+
 	for (int i = 0; i < grid_resolution; i++) {
 		for (int j = 0; j < grid_resolution; j++) {
 			for (int k = 0; k < grid_resolution; k++) {
@@ -143,21 +150,29 @@ void Grid::clear_boundary_conditions() {
 			}
 		}
 	}	
+
+	load_data_to_texture();
 }
 
 /**
- * Export the current state of the mesh to a triangulated .obj file
+ * Export the current state of the mesh to a triangulated .obj file.
  */
 void Grid::export_mesh_to_obj() {
-	// Read in mesh data from the vertex array
 	glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
 	size_t sz = 15 * (grid_resolution / 2) * (grid_resolution / 2) * (grid_resolution / 2);
 	MarchingCubeVertex* ptr = new MarchingCubeVertex[sz];
 	glGetBufferSubData(GL_ARRAY_BUFFER, 0, sz * sizeof(MarchingCubeVertex), ptr);
 	
-    std::ofstream objFile("out.obj");
+	nfdchar_t *out_path = NULL;
+	nfdresult_t result = NFD_SaveDialog("obj", NULL, &out_path);
+
+	if (out_path == NULL) return;
+	std::string out_path_str = out_path;
+
+	if (out_path_str.size() < 4 || out_path_str.substr(out_path_str.size()-4, 4) != ".obj") out_path_str += ".obj";
+    std::ofstream objFile(out_path_str);
     if (!objFile.is_open()) {
-        std::cerr << "Error opening file" << std::endl;
+        std::cerr << "Error opening export file '" << out_path << "'" << std::endl;
         delete[] ptr;
         return;
     }
@@ -170,34 +185,28 @@ void Grid::export_mesh_to_obj() {
     std::unordered_map<glm::vec3, int, std::hash<glm::vec3>> normalMap;
 
     for (size_t i = 0; i < sz; i++) {
-        // Extract position and normal using GLM
         glm::vec3 pos = ptr[i].pos - glm::vec3(0.5f, 0.5f, 0.5f);
         glm::vec3 norm = ptr[i].normal;
 
-        // Check if position is already in the distinctPositions
         if (positionMap.count(pos) == 0) {
-            positionMap[pos] = distinctPositions.size(); // Index of the new position
+            positionMap[pos] = distinctPositions.size();
             distinctPositions.push_back(pos);
         }
 
-        // Check if normal is already in the distinctNormals
         if (normalMap.count(norm) == 0) {
-            normalMap[norm] = distinctNormals.size(); // Index of the new normal
+            normalMap[norm] = distinctNormals.size();
             distinctNormals.push_back(norm);
         }
 
-        // Add face indices based on the position and normal indices
         faceIndices.push_back(positionMap[pos]);
         faceIndices.push_back(normalMap[norm]);
     }
 
-	for (int i = 0; i < distinctPositions.size(); i++) {
+	for (int i = 0; i < distinctPositions.size(); i++)
 		objFile << "v " << distinctPositions[i].x << " " << distinctPositions[i].y << " " << distinctPositions[i].z << "\n";
-	}
 
-	for (int i = 0; i < distinctNormals.size(); i++) {
+	for (int i = 0; i < distinctNormals.size(); i++)
 		objFile << "vn " << distinctNormals[i].x << " " << distinctNormals[i].y << " " << distinctNormals[i].z << "\n";
-	}
 
 	for (int i = 0; i < faceIndices.size(); i += 6) {
 		glm::vec3 A = distinctPositions[faceIndices[i]];
@@ -216,7 +225,6 @@ void Grid::export_mesh_to_obj() {
 	}
 
     objFile.close();
-    std::cout << "Exported successfully!" << std::endl;
 
     delete[] ptr;
 }
@@ -332,7 +340,6 @@ void Grid::marching_cubes_compute_dispatch() {
  */
 void Grid::draw_mesh() {
     mesh_shader.bind();
-    glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);	
     glEnable(GL_CULL_FACE);
     glBindVertexArray(mesh_vao);
     glDrawArrays(GL_TRIANGLES, 0, 15 * grid_resolution * grid_resolution * grid_resolution);

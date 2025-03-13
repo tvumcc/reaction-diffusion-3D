@@ -41,6 +41,10 @@ public:
     float boundary_scale;
     std::string boundary_obj_path;
 
+    // Mesh Visibility
+    float grid_cube_opacity = 0.1f;
+    float boundary_mesh_opacity = 0.3f;
+
     Sandbox(int window_width, int window_height);
     ~Sandbox();
 
@@ -64,7 +68,7 @@ public:
     // Boundary Condition Functions
 
     void draw_boundary_mesh();
-    void draw_grid_boundary_mesh();
+    void draw_grid_cube_mesh();
 
     // GLFW Callback Functions
 
