@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "shader.hpp"
+#include "Shader.hpp"
 
 #include <string>
 #include <fstream>

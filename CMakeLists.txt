@@ -22,10 +22,18 @@ include_directories(
 
 file(GLOB_RECURSE SRC_FILES src/*.cpp)
 
+if (WIN32)
+	set(NFD_OS_FILE lib/nativefiledialog/src/nfd_win.cpp)
+elseif (UNIX)
+	set(NFD_OS_FILE lib/nativefiledialog/src/nfd_gtk.cpp)
+else()
+	message("Can't determine which OS specific file to compile for nativefiledialog.")
+endif()
+
 add_executable(${CMAKE_PROJECT_NAME}
 	${SRC_FILES}
 	lib/nativefiledialog/src/nfd_common.c
-	lib/nativefiledialog/src/nfd_win.cpp
+	${NFD_OS_FILE}
 
 	# GLAD
 	lib/glad/src/glad.c

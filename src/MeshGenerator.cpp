@@ -1,0 +1,165 @@
+#include <imgui/imgui.h>
+
+#include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
+#include <nfd.h>
+
+#include "MeshGenerator.hpp"
+#include "MarchingCubesTables.hpp"
+
+#include <fstream>
+#include <unordered_map>
+#include <iostream>
+
+using namespace RD3D;
+
+MeshGenerator::MeshGenerator(int grid_resolution) :
+    marching_cubes_shader("shaders/marching_cubes.glsl"),
+    mesh_shader("shaders/rd3d_mesh.vert", "shaders/rd3d_mesh.frag")
+{
+    init_marching_cubes_tables();
+    init_buffers(grid_resolution);
+}
+
+void MeshGenerator::generate(int grid_resolution, GLuint grid_texture) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_3D, grid_texture);
+
+    marching_cubes_shader.bind();
+	marching_cubes_shader.set_float("grid_resolution", (float)grid_resolution);
+    marching_cubes_shader.set_float("threshold", threshold);
+	marching_cubes_shader.set_int("grid_tex", 0);
+
+    glDispatchCompute(grid_resolution / 2, grid_resolution / 2, grid_resolution / 2);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+}
+
+void MeshGenerator::resize(int grid_resolution) {
+	glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
+	glBufferData(GL_ARRAY_BUFFER, 15 * (grid_resolution / 2) * (grid_resolution / 2) * (grid_resolution / 2) * sizeof(MarchingCubeVertex), NULL, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, mesh_vbo);
+}
+
+void MeshGenerator::draw(OrbitalCamera& camera, int grid_resolution) {
+    mesh_shader.bind();
+	glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, -0.5f, -0.5f));
+    mesh_shader.set_mat4x4("model", model);
+    mesh_shader.set_mat4x4("view_proj", camera.get_view_projection_matrix());
+
+    glEnable(GL_CULL_FACE);
+    glBindVertexArray(mesh_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 15 * grid_resolution * grid_resolution * grid_resolution);
+}
+
+void MeshGenerator::export_to_obj(int grid_resolution) {
+	glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
+	size_t sz = 15 * (grid_resolution / 2) * (grid_resolution / 2) * (grid_resolution / 2);
+	MarchingCubeVertex* ptr = new MarchingCubeVertex[sz];
+	glGetBufferSubData(GL_ARRAY_BUFFER, 0, sz * sizeof(MarchingCubeVertex), ptr);
+	
+	nfdchar_t *out_path = NULL;
+	nfdresult_t result = NFD_SaveDialog("obj", NULL, &out_path);
+
+	if (out_path == NULL) return;
+	std::string out_path_str = out_path;
+
+	if (out_path_str.size() < 4 || out_path_str.substr(out_path_str.size()-4, 4) != ".obj") out_path_str += ".obj";
+    std::ofstream objFile(out_path_str);
+    if (!objFile.is_open()) {
+        std::cerr << "Error opening export file '" << out_path << "'" << std::endl;
+        delete[] ptr;
+        return;
+    }
+
+	std::vector<glm::vec3> positions;
+	std::vector<glm::vec3> normals;
+	std::vector<int> faceIndices;
+
+	std::unordered_map<glm::vec3, int, std::hash<glm::vec3>> position_map;
+    std::unordered_map<glm::vec3, int, std::hash<glm::vec3>> normal_map;
+
+    for (size_t i = 0; i < sz; i++) {
+        glm::vec3 pos = ptr[i].pos - glm::vec3(0.5f, 0.5f, 0.5f);
+        glm::vec3 norm = ptr[i].normal;
+
+        if (position_map.count(pos) == 0) {
+            position_map[pos] = positions.size();
+            positions.push_back(pos);
+        }
+
+        if (normal_map.count(norm) == 0) {
+            normal_map[norm] = normals.size();
+            normals.push_back(norm);
+        }
+
+        faceIndices.push_back(position_map[pos]);
+        faceIndices.push_back(normal_map[norm]);
+    }
+
+	for (int i = 0; i < positions.size(); i++)
+		objFile << "v " << positions[i].x << " " << positions[i].y << " " << positions[i].z << "\n";
+
+	for (int i = 0; i < normals.size(); i++)
+		objFile << "vn " << normals[i].x << " " << normals[i].y << " " << normals[i].z << "\n";
+
+	for (int i = 0; i < faceIndices.size(); i += 6) {
+		glm::vec3 A = positions[faceIndices[i]];
+		glm::vec3 B = positions[faceIndices[i+2]];
+		glm::vec3 C = positions[faceIndices[i+4]];
+		float a = glm::length(B - C);
+		float b = glm::length(A - C);
+		float c = glm::length(A - B);
+		float s = 0.5 * (a + b + c);
+		float area = sqrt(s * (s - a) * (s - b) * (s - c));
+		if (area <= 0) continue;
+
+		objFile << "f " << faceIndices[i]+1 << "//" << faceIndices[i+1]+1 << " "; 
+		objFile << faceIndices[i+2]+1 << "//" << faceIndices[i+3]+1 << " "; 
+		objFile << faceIndices[i+4]+1 << "//" << faceIndices[i+5]+1 << "\n"; 
+	}
+
+    objFile.close();
+
+    delete[] ptr;
+}
+
+void MeshGenerator::draw_gui(int grid_resolution) {
+	if (ImGui::Button("Export Mesh as .obj")) export_to_obj(grid_resolution);
+	ImGui::SliderFloat("Threshold", &threshold, 0.0f, 1.0f);
+}
+
+void MeshGenerator::init_buffers(int grid_resolution) {
+	glGenVertexArrays(1, &mesh_vao);
+	glBindVertexArray(mesh_vao);
+
+	glGenBuffers(1, &mesh_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, mesh_vbo);
+	glBufferData(GL_ARRAY_BUFFER, 15 * (grid_resolution / 2) * (grid_resolution / 2) * (grid_resolution / 2) * sizeof(MarchingCubeVertex), NULL, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, mesh_vbo);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MarchingCubeVertex), (void*)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(MarchingCubeVertex), (void*)offsetof(MarchingCubeVertex, normal));
+	glEnableVertexAttribArray(1);
+}
+
+void MeshGenerator::init_marching_cubes_tables() {
+	unsigned int edge_table_ssbo;
+	glGenBuffers(1, &edge_table_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, edge_table_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, edge_table.size() * sizeof(int), edge_table.data(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, edge_table_ssbo);
+
+	unsigned int vertex_table_ssbo;
+	glGenBuffers(1, &vertex_table_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, vertex_table_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, vertex_table.size() * sizeof(int), vertex_table.data(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, vertex_table_ssbo);
+
+	unsigned int triangle_table_ssbo;
+	glGenBuffers(1, &triangle_table_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, triangle_table_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, triangle_table.size() * sizeof(int), triangle_table.data(), GL_STATIC_READ);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, triangle_table_ssbo);
+}

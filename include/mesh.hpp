@@ -3,7 +3,7 @@
 #include <glad/glad.h>
 #include <tiny_obj_loader.h>
 
-#include "shader.hpp"
+#include "Shader.hpp"
 
 #include <vector>
 #include <string>

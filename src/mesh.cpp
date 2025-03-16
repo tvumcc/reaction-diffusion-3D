@@ -1,4 +1,4 @@
-#include "mesh.hpp"
+#include "Mesh.hpp"
 
 #include <iostream>
 
@@ -23,8 +23,6 @@ Mesh::Mesh(std::string path) {
             std::cerr << "[ERROR] TinyObjReader: " << reader.Error();
         exit(1);
     }
-    if (!reader.Warning().empty())
-        std::cout << "[WARNING] TinyObjReader: " << reader.Warning();
 
     auto& attrib = reader.GetAttrib();
     auto& shapes = reader.GetShapes();

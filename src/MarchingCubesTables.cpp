@@ -1,4 +1,4 @@
-#include "marching_cubes.hpp"
+#include "MarchingCubesTables.hpp"
 
 std::array<int, 256> edge_table = {
     0x0, 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
