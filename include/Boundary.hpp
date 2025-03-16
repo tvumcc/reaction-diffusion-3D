@@ -24,6 +24,8 @@ namespace RD3D {
         void clear_boundary_mesh();
         void voxelize_boundary();
         void clear_boundary();
+        void thicken_boundary();
+        void invert_boundary();
 
         void draw_boundary_mesh(OrbitalCamera& camera);
         void draw_grid_boundary_mesh(OrbitalCamera& camera);

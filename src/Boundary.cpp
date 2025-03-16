@@ -120,6 +120,73 @@ void Boundary::clear_boundary() {
 }
 
 /**
+ * Thickens the boundary values in all directions.
+ */
+void Boundary::thicken_boundary() {
+	auto get_grid_cell = [](Simulator* sim, int x, int y, int z){
+		size_t idx = 4 * (z + y * sim->grid_resolution + x * (sim->grid_resolution * sim->grid_resolution)) + 2;
+		return &sim->grid[idx];
+	};
+
+	int dx[26] = {1, 1, 1, 0, 0, 0, -1, -1, -1, 1, 1, -1, 1, -1, -1, 0, 0, 0, 1, -1, 1, -1, 1, -1, 0, 0};
+	int dy[26] = {1, 1, -1, 1, 0, -1, 1, 0, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 0, 0, 1, -1, 1, -1, 0, 0};
+	int dz[26] = {1, -1, 0, 1, 1, 1, 1, -1, 0, -1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 1, -1, -1, 1, -1, 1, -1};
+
+	for (int i = 0; i < simulator->grid_resolution; i++) {
+		for (int j = 0; j < simulator->grid_resolution; j++) {
+			for (int k = 0; k < simulator->grid_resolution; k++) {
+				size_t idx = 4 * (i + j * simulator->grid_resolution + k * (simulator->grid_resolution * simulator->grid_resolution)) + 2;
+				if (*get_grid_cell(simulator, k, j, i) == 1.0f) {
+					for (int dir = 0; dir < 26; dir++) {
+						int nx = k + dx[dir];
+						int ny = j + dy[dir];
+						int nz = i + dz[dir];
+
+						if (nx >= 0 && nx < simulator->grid_resolution && ny >= 0 && ny < simulator->grid_resolution && nz >= 0 && nz < simulator->grid_resolution) {
+							auto p = get_grid_cell(simulator, nx, ny, nz);	
+							if (*p == 0.0f) *p = 0.5f;
+						}
+					}	
+				}
+			}
+		}
+	}	
+
+	for (int i = 0; i < simulator->grid_resolution; i++) {
+		for (int j = 0; j < simulator->grid_resolution; j++) {
+			for (int k = 0; k < simulator->grid_resolution; k++) {
+				auto p = get_grid_cell(simulator, k, j, i);
+				if (*p == 0.5f) *p = 1.0f;	
+			}
+		}
+	}	
+
+	simulator->load_data_to_texture();
+}
+
+/**
+ * Turns all boundary value cells into empty cells and vice versa.
+ */
+void Boundary::invert_boundary() {
+	auto get_grid_cell = [](Simulator* sim, int x, int y, int z){
+		size_t idx = 4 * (z + y * sim->grid_resolution + x * (sim->grid_resolution * sim->grid_resolution)) + 2;
+		return &sim->grid[idx];
+	};
+
+	for (int i = 0; i < simulator->grid_resolution; i++) {
+		for (int j = 0; j < simulator->grid_resolution; j++) {
+			for (int k = 0; k < simulator->grid_resolution; k++) {
+				auto p = get_grid_cell(simulator, k, j, i);
+				if (*p == 1.0f) *p = 0.0f;	
+				else *p = 1.0f;
+			}
+		}
+	}	
+
+	simulator->load_data_to_texture();
+}
+
+/**
  * Draws the currently selected boundary mesh in 3D space.
  * 
  * @param camera The camera to render in the perspective of
@@ -173,6 +240,9 @@ void Boundary::draw_gui() {
 		boundary_offset = glm::vec3(0.0f, 0.0f, 0.0f);
 		boundary_scale = 1.0f;
 	}
+	if (ImGui::Button("Thicken")) thicken_boundary();
+	ImGui::SameLine();
+	if (ImGui::Button("Invert")) invert_boundary();
 
 	ImGui::SliderFloat3("Mesh Offset", glm::value_ptr(boundary_offset), -1.0f, 1.0f);
 	ImGui::SliderFloat("Mesh Scale", &boundary_scale, 0.0f, 2.0f);
