@@ -2,18 +2,21 @@
 
 #include <iostream>
 
-/*
-    Creates a Mesh object using the passed in vertices directly
-*/
+/**
+ * Creates a Mesh object using the passed in vertices.
+ * 
+ * @param vertices Vector of Vertex objects which directly define the mesh's geometry without the need for indices
+ */
 Mesh::Mesh(std::vector<Vertex> vertices) {
     this->vertices = vertices;
     init_data();
 }
 
-/*
-    Creates a Mesh object using data from the Wavefront .obj file 
-    specified via path.
-*/
+/**
+ * Creates a Mesh object using data from the Wavefront .obj file specified via path.
+ * 
+ * @param path File path to the .obj file from which to load the mesh
+ */
 Mesh::Mesh(std::string path) {
     tinyobj::ObjReader reader;
     tinyobj::ObjReaderConfig reader_config;
@@ -42,17 +45,13 @@ Mesh::Mesh(std::string path) {
                 tinyobj::real_t tx = 0.0f;
                 tinyobj::real_t ty = 0.0f;
 
-                // Check if `normal_index` is zero or positive. negative = no normal data
-                if (idx.normal_index >= 0)
-                {
+                if (idx.normal_index >= 0) {
                     nx = attrib.normals[3 * size_t(idx.normal_index) + 0];
                     ny = attrib.normals[3 * size_t(idx.normal_index) + 1];
                     nz = attrib.normals[3 * size_t(idx.normal_index) + 2];
                 }
 
-                // Check if `texcoord_index` is zero or positive. negative = no texcoord data
-                if (idx.texcoord_index >= 0)
-                {
+                if (idx.texcoord_index >= 0) {
                     tx = attrib.texcoords[2 * size_t(idx.texcoord_index) + 0];
                     ty = attrib.texcoords[2 * size_t(idx.texcoord_index) + 1];
                 }
@@ -72,19 +71,22 @@ Mesh::Mesh(std::string path) {
     init_data();
 }
 
-/*
-    Draws this mesh using the given Shader object.
-    Ensure that all necessary uniforms are bound beforehand.
-*/
+/**
+ * Draws this mesh using the given Shader object.
+ * Ensure that all necessary uniforms are bound beforehand.
+ * 
+ * @param shader The shader to use in the pipeline when rendering this mesh
+ * @param primitive_type The OpenGL primitive that will be used to interpret the mesh data, e.g. GL_TRIANGLES, GL_POINT, GL_LINE
+ */
 void Mesh::draw(Shader& shader, GLenum primitive_type) {
     shader.bind(); 
     glBindVertexArray(vertex_array);
     glDrawArrays(primitive_type, 0, vertices.size());
 }
 
-/*
-    Generates and binds the OpenGL object for this mesh.
-*/
+/**
+ * Generates and binds the OpenGL objects for this mesh.
+ */
 void Mesh::init_data() {
     glGenVertexArrays(1, &vertex_array);
     glBindVertexArray(vertex_array);

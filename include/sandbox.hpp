@@ -6,9 +6,13 @@
 #include "MeshGenerator.hpp"
 #include "SliceViewer.hpp"
 
+/**
+ * Orchestrates simulation, mesh generation, slice viewing, GUI, and rendering all together.
+ * Manages the main loop of the application.
+ */
 class Sandbox {
 public:
-    Sandbox(int window_width, int window_height);
+    Sandbox(int window_width, int window_height, bool maximized);
     ~Sandbox();
 
     void run();
@@ -33,7 +37,6 @@ private:
     void init_gui(std::string font_path, int font_size);
     void draw_gui();
 
-    // GLFW Callback Functions
     static void resize_callback(GLFWwindow* window, int width, int height);
     static void cursor_pos_callback(GLFWwindow* window, double x, double y);
     static void scroll_callback(GLFWwindow* window, double dx, double dy);

@@ -16,6 +16,10 @@ namespace RD3D {
         alignas(8) glm::vec3 normal;
     };
 
+    /**
+     * Manages the triangulation of the reaction diffusion scalar field through Marching Cubes, 
+     * rendering that mesh, and exporting the mesh to .obj files. 
+     */
     class MeshGenerator {
     public:
         MeshGenerator(int grid_resolution);

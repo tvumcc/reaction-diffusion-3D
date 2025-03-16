@@ -26,10 +26,10 @@ struct Vertex {
     }
 };
 
-/*
-    Represents a collection of vertices that define a 3D geometry.
-    Provides support for the position, uv, and normal components of each vertex.
-*/
+/**
+ * Represents a collection of vertices that define a 3D geometry.
+ * Provides support for the position, uv, and normal components of each vertex.
+ */
 class Mesh {
 public:
     Mesh(std::vector<Vertex> vertices);

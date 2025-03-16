@@ -1,6 +1,9 @@
 #pragma once
 #include <glm/glm.hpp>
 
+/**
+ * Represents a camera that rotates in a circle around fixed orbit position.
+ */
 class OrbitalCamera {
 public:
     OrbitalCamera();

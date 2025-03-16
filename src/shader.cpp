@@ -8,18 +8,24 @@
 #include <fstream>
 #include <iostream>
 
-// Check for either linking for compile errors
+/**
+ * Check for shader linking or compilation errors.
+ * 
+ * @param ID ID of the shader in the OpenGL state
+ * @param type Type of shader to debug, see ShaderType enum
+ * @param filename Source file that the shader was compiled/linked from
+ */
 void checkErrors(unsigned int ID, ShaderType type, const std::string& filename) {
     int success;
     char error_log[512];
 
-    if (type == ShaderType::Program) {
+    if (type == ShaderType::Program) { // Check for linking errors
         glGetProgramiv(ID, GL_LINK_STATUS, &success);
         if (!success) {
             glGetProgramInfoLog(ID, 512, NULL, error_log);
             std::cout << "Problem linking " << filename << ":\n" << error_log << std::endl;
         }
-    } else {
+    } else { // Check for compilation errors
         std::string type_strs[4] = {"VERTEX", "FRAGMENT", "GEOMETRY", "COMPUTE"};
         std::string type_str = type_strs[(int)type];
 
@@ -31,7 +37,14 @@ void checkErrors(unsigned int ID, ShaderType type, const std::string& filename) 
     }
 }
 
-// Create a shader given a file path to a vertex and fragment shader
+
+/**
+ * Create a shader given a file paths to the respective source files.
+ * 
+ * @param vertex_source_path File path to the Vertex Shader
+ * @param fragment_source_path File path to the Fragment Shader
+ * @param geometry_source_path File path to the Geometry Shader
+ */
 Shader::Shader(const std::string& vertex_source_path, const std::string& fragment_source_path, const std::string& geometry_source_path) {
     std::string line, v_text, f_text;
     std::ifstream v_file(vertex_source_path), f_file(fragment_source_path);
@@ -73,7 +86,11 @@ Shader::Shader(const std::string& vertex_source_path, const std::string& fragmen
     glDeleteShader(FS);
 }
 
-// Compile a geometry shader source file and return its ID
+/**
+ * Utility function to compile a Geometry Shader.
+ * 
+ * @param geometry_source_path File path to the Geometry Shader
+ */
 unsigned int Shader::compile_geometry_shader(const std::string& geometry_source_path) {
     std::string line, g_text;
     std::ifstream g_file(geometry_source_path);
@@ -93,7 +110,11 @@ unsigned int Shader::compile_geometry_shader(const std::string& geometry_source_
     return GS;
 }
 
-// Create a compute shader given the path to a source file
+/**
+ * Create a compute shader given the path to a source file.
+ * 
+ * @param compute_source_path File path to the Compute Shader
+ */
 ComputeShader::ComputeShader(const std::string& compute_source_path) {
     std::string line, text;
     std::ifstream file(compute_source_path);
@@ -117,42 +138,76 @@ ComputeShader::ComputeShader(const std::string& compute_source_path) {
     glDeleteShader(CS);
 }
 
-// Bind shader to OpenGL state
+/**
+ * Bind shader to OpenGL state.
+ */
 void AbstractShader::bind() {
     glUseProgram(this->ID);
 }
 
-// Unbind shader from OpenGL state
+/**
+ * Unbind shader from OpenGL state.
+ */
 void AbstractShader::unbind() {
     glUseProgram(0);
 }
 
-// Send an integer uniform to the shader
+/**
+ * Send an integer uniform to the shader.
+ * 
+ * @param identifier Name of the uniform in the shader source code
+ * @param value Value to assign to the shader's uniform
+ */
 void AbstractShader::set_int(const std::string& identifier, int value) {
     glUniform1i(glGetUniformLocation(this->ID, identifier.c_str()), value);
 }
 
-// Send a float uniform to the shader
+/**
+ * Send a float uniform to the shader.
+ * 
+ * @param identifier Name of the uniform in the shader source code
+ * @param value Value to assign to the shader's uniform
+ */
 void AbstractShader::set_float(const std::string& identifier, float value) {
     glUniform1f(glGetUniformLocation(this->ID, identifier.c_str()), value);
 }
 
-// Send a boolean uniform to the shader
+/**
+ * Send a boolean uniform to the shader.
+ * 
+ * @param identifier Name of the uniform in the shader source code
+ * @param value Value to assign to the shader's uniform
+ */
 void AbstractShader::set_bool(const std::string& identifier, bool value) {
     glUniform1i(glGetUniformLocation(this->ID, identifier.c_str()), value);
 }
 
-// Send a 4x4 matrix uniform to the shader
+/**
+ * Send a 4x4 matrix uniform to the shader.
+ * 
+ * @param identifier Name of the uniform in the shader source code
+ * @param value Value to assign to the shader's uniform
+ */
 void AbstractShader::set_mat4x4(const std::string& identifier, glm::mat4 value) {
     glUniformMatrix4fv(glGetUniformLocation(this->ID, identifier.c_str()), 1, GL_FALSE, glm::value_ptr(value));
 }
 
-// Send a vec3 uniform to the shader
+/**
+ * Send a vec3 uniform to the shader.
+ * 
+ * @param identifier Name of the uniform in the shader source code
+ * @param value Value to assign to the shader's uniform
+ */
 void AbstractShader::set_vec3(const std::string& identifier, glm::vec3 value) {
     glUniform3fv(glGetUniformLocation(this->ID, identifier.c_str()), 1, glm::value_ptr(value));
 }
 
-// Send a vec2 uniform to the shader
+/**
+ * Send a vec3 uniform to the shader.
+ * 
+ * @param identifier Name of the uniform in the shader source code
+ * @param value Value to assign to the shader's uniform
+ */
 void AbstractShader::set_vec2(const std::string& identifier, glm::vec2 value) {
     glUniform2fv(glGetUniformLocation(this->ID, identifier.c_str()), 1, glm::value_ptr(value));
 }

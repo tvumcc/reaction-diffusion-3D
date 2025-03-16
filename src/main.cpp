@@ -3,6 +3,6 @@
 #include <iostream>
 
 int main() {
-	Sandbox sandbox(1100, 800);
+	Sandbox sandbox(1100, 800, true);
 	sandbox.run();
 }

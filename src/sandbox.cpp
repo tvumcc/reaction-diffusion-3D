@@ -4,7 +4,7 @@
 
 #include "Sandbox.hpp"
 
-Sandbox::Sandbox(int window_width, int window_height) {
+Sandbox::Sandbox(int window_width, int window_height, bool maximized) {
     initialize_window(window_width, window_height);
 	init_gui("assets/NotoSans.ttf", 20);
 
@@ -12,7 +12,7 @@ Sandbox::Sandbox(int window_width, int window_height) {
     mesh_generator = std::make_unique<RD3D::MeshGenerator>(simulator->grid_resolution);
     slice_viewer = std::make_unique<RD3D::SliceViewer>(simulator->grid_resolution);
 
-	glfwMaximizeWindow(window);
+	if (maximized) glfwMaximizeWindow(window);
 }
 
 Sandbox::~Sandbox() {
@@ -22,6 +22,9 @@ Sandbox::~Sandbox() {
 	glfwTerminate();
 }
 
+/**
+ * Start the main application loop.
+ */
 void Sandbox::run() {
 	while (!glfwWindowShouldClose(window)) {
 		calculate_framerate();
@@ -56,6 +59,12 @@ void Sandbox::run() {
 	}
 }
 
+/**
+ * Set up the GLFW window and load GLAD to initialize OpenGL.
+ * 
+ * @param window_width Initial width of the window 
+ * @param window_height Initial height of the window
+ */
 void Sandbox::initialize_window(int window_width, int window_height) {
     this->window_width = window_width;
     this->window_height = window_height;
@@ -64,11 +73,9 @@ void Sandbox::initialize_window(int window_width, int window_height) {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    // Initialize GLFW and the window
 	window = glfwCreateWindow(window_width, window_height, "Reaction Diffusion 3D", NULL, NULL);
 	glfwMakeContextCurrent(window);
 
-    // Initialize GLAD and various callback functions
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSetFramebufferSizeCallback(window, resize_callback);
 	glfwSetCursorPosCallback(window, cursor_pos_callback);
@@ -91,6 +98,10 @@ void Sandbox::initialize_window(int window_width, int window_height) {
 	last_frame = glfwGetTime();
 }
 
+/**
+ * Calculate the current framerate of the application based on
+ * how long it took for the previous frame to pass.
+ */
 void Sandbox::calculate_framerate() {
 	double curr_frame = glfwGetTime();
 	fps = 1.0 / (curr_frame - last_frame);
@@ -101,6 +112,12 @@ void Sandbox::calculate_framerate() {
 	last_frame = curr_frame;
 }
 
+/**
+ * Initialize ImGui for later GUI rendering in the main loop.
+ * 
+ * @param font_path File path to the font to use for the GUI
+ * @param font_size Size of the GUI font
+ */
 void Sandbox::init_gui(std::string font_path, int font_size) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -112,6 +129,9 @@ void Sandbox::init_gui(std::string font_path, int font_size) {
 	ImGui_ImplOpenGL3_Init("#version 460");
 }
 
+/**
+ * Draw the right sidebar GUI.
+ */
 void Sandbox::draw_gui(){
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -163,6 +183,10 @@ void Sandbox::draw_gui(){
 	ImGui::End();
 
 }
+
+/**
+ * GLFW Callbacks
+ */
 
 void Sandbox::resize_callback(GLFWwindow* window, int width, int height) {
     Sandbox* sandbox = (Sandbox*)glfwGetWindowUserPointer(window); 

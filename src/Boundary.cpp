@@ -22,6 +22,9 @@ Boundary::Boundary() :
 {
 }
 
+/**
+ * Import a mesh from a .obj file for use in defining the boundary conditions of the simulation.
+ */
 void Boundary::import_boundary_mesh() {
     nfdchar_t *outPath = NULL;		
     nfdresult_t result = NFD_OpenDialog(NULL, NULL, &outPath);
@@ -32,11 +35,18 @@ void Boundary::import_boundary_mesh() {
     }
 }
 
+/**
+ * Gets rid of the boundary mesh from the state but does not remove the boundary values in the grid.
+ */
 void Boundary::clear_boundary_mesh() {
     boundary_mesh = nullptr;
     boundary_obj_path = "";
 }
 
+/**
+ * Uses the currently loaded boundary mesh to place corresponding boundary values in the grid.
+ * This will also erase all current boundary values and reset the simulation.
+ */
 void Boundary::voxelize_boundary() {
 	if (boundary_obj_path.empty()) return;
 	clear_boundary();
@@ -93,6 +103,9 @@ void Boundary::voxelize_boundary() {
 	simulator->load_data_to_texture();	
 }
 
+/**
+ * Clears all of the boundary values from the grid.
+ */
 void Boundary::clear_boundary() {
 	for (int i = 0; i < simulator->grid_resolution; i++) {
 		for (int j = 0; j < simulator->grid_resolution; j++) {
@@ -106,6 +119,11 @@ void Boundary::clear_boundary() {
 	simulator->load_data_to_texture();
 }
 
+/**
+ * Draws the currently selected boundary mesh in 3D space.
+ * 
+ * @param camera The camera to render in the perspective of
+ */
 void Boundary::draw_boundary_mesh(OrbitalCamera& camera) {
 	if (boundary_mesh) {
 		boundary_shader.bind();
@@ -121,6 +139,11 @@ void Boundary::draw_boundary_mesh(OrbitalCamera& camera) {
 	}
 }
 
+/**
+ * Draws the cube that highlights the unchanging boundaries of the 3D grid.
+ * 
+ * @param camera The camera to render in the perspective of
+ */
 void Boundary::draw_grid_boundary_mesh(OrbitalCamera& camera) {
 	boundary_shader.bind();
 	glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f));
@@ -133,6 +156,9 @@ void Boundary::draw_grid_boundary_mesh(OrbitalCamera& camera) {
 	grid_boundary_mesh.draw(boundary_shader, GL_TRIANGLES);
 }
 
+/**
+ * Draw the GUI section that allows for manipulation of the simulation's boundaries.
+ */
 void Boundary::draw_gui() {
 	if (ImGui::Button("Import")) import_boundary_mesh();
 	ImGui::SameLine();
@@ -153,8 +179,4 @@ void Boundary::draw_gui() {
 
 	ImGui::SliderFloat("Grid Cube Opacity", &grid_cube_opacity, 0.0f, 1.0f);
 	ImGui::SliderFloat("Boundary Mesh Opacity", &boundary_mesh_opacity, 0.0f, 1.0f);
-}
-
-void Boundary::set_simulator(Simulator* simulator) {
-    this->simulator = simulator;
 }

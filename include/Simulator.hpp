@@ -11,6 +11,11 @@
 namespace RD3D {
     class SliceViewer;
 
+    /**
+     * Manages the numerical simulation of the Gray-Scott Reaction Diffusion model
+     * using the Finite Difference Method as well as the parameters that change the
+     * behavior of the simulation.
+     */
     class Simulator {
     public:
         GLuint grid_texture;

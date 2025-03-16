@@ -17,9 +17,12 @@ Simulator::Simulator() :
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     load_data_to_texture();
 
-    boundary.set_simulator(this);
+	boundary.simulator = this;
 }
 
+/**
+ * Dispatch the compute shader that solves the Gray-Scott Reaction Diffusion PDEs
+ */
 void Simulator::simulate_time_steps() {
     shader.bind();
 	set_shader_uniforms();
@@ -29,17 +32,32 @@ void Simulator::simulate_time_steps() {
     }
 }
 
+/**
+ * Reset the simulation. This should preserve boundary values while setting the concentration
+ * of chemical V at each grid cell to 0.
+ */
 void Simulator::reset() {
 	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, grid_resolution, grid_resolution, grid_resolution, 0, GL_RGBA, GL_FLOAT, grid.data());
 	glBindImageTexture(0, grid_texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA32F);
 }
 
+/**
+ * Resize the grid to match the specified grid_resolution. This will clear the entire grid,
+ * including boundary values. 
+ */
 void Simulator::resize() {
 	grid = std::vector<float>(4 * grid_resolution * grid_resolution * grid_resolution, 0.0f);
 	boundary.clear_boundary();
     load_data_to_texture();
 }
 
+/**
+ * Enable the brush which allows the user to set chemical concentrations through the slice viewer.
+ * 
+ * @param x The x position of the brush
+ * @param y The y position of the brush
+ * @param z The z position of the brush
+ */
 void Simulator::enable_brush(int x, int y, int z) {
     brush_x = x;
     brush_y = y;
@@ -47,14 +65,23 @@ void Simulator::enable_brush(int x, int y, int z) {
     brush_enabled = true;
 }
 
+/**
+ * Disable the brush.
+ */
 void Simulator::disable_brush() {
     brush_enabled = false;
 }
 
+/**
+ * Toggle the pause state of the simulation.
+ */
 void Simulator::toggle_pause() {
 	paused = !paused;
 }
 
+/**
+ * Draw the GUI section that allows for manipulation of the simulation's parameters.
+ */
 void Simulator::draw_gui(MeshGenerator& mesh_generator, SliceViewer& slice_viewer) {
 	ImGui::Checkbox("Paused", &paused);
 	ImGui::SameLine();
@@ -69,6 +96,9 @@ void Simulator::draw_gui(MeshGenerator& mesh_generator, SliceViewer& slice_viewe
 	ImGui::SliderInt("Steps/Frame", &simulation_time_steps_per_frame, 1, 50);
 }
 
+/**
+ * Utility function to set all of the simulation's parameters as shader's uniforms.
+ */
 void Simulator::set_shader_uniforms() {
 	shader.bind();
     shader.set_float("F", feed_rate);
@@ -85,6 +115,9 @@ void Simulator::set_shader_uniforms() {
 	shader.set_int("grid_resolution", grid_resolution);
 }
 
+/**
+ * Utility function to load everything from the grid 3D vector to the 3D texture on the GPU.
+ */
 void Simulator::load_data_to_texture() {
 	glBindTexture(GL_TEXTURE_3D, grid_texture);
 	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, grid_resolution, grid_resolution, grid_resolution, 0, GL_RGBA, GL_FLOAT, grid.data());

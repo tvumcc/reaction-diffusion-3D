@@ -5,6 +5,9 @@
 #include "Simulator.hpp"
 
 namespace RD3D {
+    /**
+     * Manages the rendering of a 2D slice of the 3D grid.
+     */
     class SliceViewer {
     public:
         SliceViewer(int grid_resolution);

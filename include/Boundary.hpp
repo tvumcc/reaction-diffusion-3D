@@ -12,6 +12,10 @@
 namespace RD3D {
     class Simulator;
 
+    /**
+     * Manages the transformation and drawing of boundary meshes and the voxelization
+     * of said meshes into boundary values stored the grid.
+     */
     class Boundary {
     public:
         Boundary();
@@ -38,8 +42,6 @@ namespace RD3D {
 
         float grid_cube_opacity = 0.1f;
         float boundary_mesh_opacity = 0.3f;
-
-        void set_simulator(Simulator* simulator);
 
         friend class Simulator;
     };

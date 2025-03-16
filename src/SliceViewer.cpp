@@ -12,6 +12,12 @@ SliceViewer::SliceViewer(int grid_resolution) :
     init_buffers(grid_resolution);
 }
 
+/**
+ * Render the slice of the 3D texture to an OpenGL framebuffer.
+ * 
+ * @param grid_resolution The simulation grid's resolution
+ * @param grid_texture OpenGL texture object refering to the 3D grid
+ */
 void SliceViewer::render(int grid_resolution, GLuint grid_texture) {
     glBindFramebuffer(GL_FRAMEBUFFER, slice_fbo);
     glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
@@ -32,11 +38,23 @@ void SliceViewer::render(int grid_resolution, GLuint grid_texture) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+/**
+ * Resize the 2D slice texture to match the grid resolution.
+ * 
+ * @param grid_resolution The simulation grid's resolution
+ */
 void SliceViewer::resize(int grid_resolution) {
 	glBindTexture(GL_TEXTURE_2D, slice_texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, grid_resolution, grid_resolution, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 }
 
+/**
+ * Draw the GUI section that allows for manipulation of the simulation's mesh generation.
+ * 
+ * @param simulator Pointer to the Simulator object that this SliceViewer renders from
+ * @param grid_resolution The simulation grid's resolution
+ * @param ui_sidebar_width Width of the right sidebar GUI to determine how big to draw the slice in the GUI
+ */
 void SliceViewer::draw_gui(Simulator* simulator, int grid_resolution, int ui_sidebar_width) {
 	if (ImGui::SliderInt("Slice", &slice_depth, 0, grid_resolution-1)) slice_depth = std::min(slice_depth, grid_resolution-1);
 	ImGui::Image((ImTextureID)slice_texture, ImVec2(ui_sidebar_width - 20, ui_sidebar_width - 20));
@@ -56,6 +74,11 @@ void SliceViewer::draw_gui(Simulator* simulator, int grid_resolution, int ui_sid
 	} else simulator->disable_brush();
 }
 
+/**
+ * Utility function to set up the vertex buffer, framebuffer, and 2D texture for rendering the slice.
+ * 
+ * @param grid_resolution The simulation grid's resolution
+ */
 void SliceViewer::init_buffers(int grid_resolution) {
     float vertices[] = {
         1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
