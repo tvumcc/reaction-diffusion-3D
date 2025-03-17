@@ -128,25 +128,29 @@ void Boundary::thicken_boundary() {
 		return &sim->grid[idx];
 	};
 
-	int dx[26] = {1, 1, 1, 0, 0, 0, -1, -1, -1, 1, 1, -1, 1, -1, -1, 0, 0, 0, 1, -1, 1, -1, 1, -1, 0, 0};
-	int dy[26] = {1, 1, -1, 1, 0, -1, 1, 0, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 0, 0, 1, -1, 1, -1, 0, 0};
-	int dz[26] = {1, -1, 0, 1, 1, 1, 1, -1, 0, -1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 1, -1, -1, 1, -1, 1, -1};
+	int dx[3] = {-1, 0, 1};
+	int dy[3] = {-1, 0, 1};
+	int dz[3] = {-1, 0, 1};
 
 	for (int i = 0; i < simulator->grid_resolution; i++) {
 		for (int j = 0; j < simulator->grid_resolution; j++) {
 			for (int k = 0; k < simulator->grid_resolution; k++) {
 				size_t idx = 4 * (i + j * simulator->grid_resolution + k * (simulator->grid_resolution * simulator->grid_resolution)) + 2;
 				if (*get_grid_cell(simulator, k, j, i) == 1.0f) {
-					for (int dir = 0; dir < 26; dir++) {
-						int nx = k + dx[dir];
-						int ny = j + dy[dir];
-						int nz = i + dz[dir];
+					for (int a = 0; a < 3; a++) {
+						for (int b = 0; b < 3; b++) {
+							for (int c = 0; c < 3; c++) {
+								int nx = k + dx[a];
+								int ny = j + dy[b];
+								int nz = i + dz[c];
 
-						if (nx >= 0 && nx < simulator->grid_resolution && ny >= 0 && ny < simulator->grid_resolution && nz >= 0 && nz < simulator->grid_resolution) {
-							auto p = get_grid_cell(simulator, nx, ny, nz);	
-							if (*p == 0.0f) *p = 0.5f;
+								if (nx >= 0 && nx < simulator->grid_resolution && ny >= 0 && ny < simulator->grid_resolution && nz >= 0 && nz < simulator->grid_resolution) {
+									auto p = get_grid_cell(simulator, nx, ny, nz);	
+									if (*p == 0.0f) *p = 0.5f;
+								}
+							}
 						}
-					}	
+					}
 				}
 			}
 		}
