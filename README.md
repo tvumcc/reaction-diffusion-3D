@@ -4,6 +4,8 @@
 
 ## Screenshots
 
+![Preview Image](assets/screenshots/rd3d_preview.png)
+
 ![3D Gray-Scott Stanford Bunny](assets/screenshots/bunny.png)
 
 ![3D Gray-Scott Stanford Bunny in Blender](assets/screenshots/bunny_export.png)
